@@ -24,6 +24,7 @@ import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.Panorama;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.quickplay.QuickPlay;
@@ -40,8 +41,10 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 public class TitleScreen extends Screen {
+   private static final net.minecraft.resources.Identifier FIG_BACKGROUND =
+      net.minecraft.resources.Identifier.withDefaultNamespace("textures/gui/title/fig_waterfall.png");
    private static final Logger LOGGER = LogUtils.getLogger();
-   private static final Component TITLE = Component.translatable("narrator.screen.title");
+   private static final Component TITLE = Component.literal("Fig Client");
    private static final Component COPYRIGHT_TEXT = Component.translatable("title.credits");
    private static final String DEMO_LEVEL_ID = "Demo_World";
    private @Nullable SplashRenderer splash;
@@ -68,6 +71,7 @@ public class TitleScreen extends Screen {
       textureManager.registerForNextReload(LogoRenderer.MINECRAFT_LOGO);
       textureManager.registerForNextReload(LogoRenderer.MINECRAFT_EDITION);
       textureManager.registerForNextReload(Panorama.PANORAMA_OVERLAY);
+      textureManager.registerForNextReload(FIG_BACKGROUND);
    }
 
    @Override
@@ -119,12 +123,18 @@ public class TitleScreen extends Screen {
          CommonButtons.accessibility(20, var1x -> this.minecraft.gui.setScreen(new AccessibilityOptionsScreen(this, this.minecraft.options)), true)
       );
       accessibility.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20), topPos);
-      Button.Builder var10001 = Button.builder(
-         Component.translatable("menu.options"), var1x -> this.minecraft.gui.setScreen(new OptionsScreen(this, this.minecraft.options, false))
-      );
       int var10002 = this.width / 2 - 100;
       topPos += 24;
-      this.addRenderableWidget(var10001.bounds(var10002, topPos, 98, 20).build());
+      this.addRenderableWidget(
+         Button.builder(Component.literal("Fig Mods"), var1x -> this.minecraft.gui.setScreen(
+            new net.minecraft.client.gui.screens.options.FigModulesScreen(this, this.minecraft.options)
+         )).bounds(var10002, topPos, 98, 20).build()
+      );
+      this.addRenderableWidget(
+         Button.builder(Component.literal("Relays"), var1x -> this.minecraft.gui.setScreen(
+            new net.lax1dude.eaglercraft.v1_8.sp.gui.RelaySettingsScreen(this)
+         )).bounds(this.width / 2 + 2, topPos, 98, 20).build()
+      );
       boolean eaglerHosted = net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive();
       this.addRenderableWidget(
          Button.builder(eaglerHosted ? Component.translatableWithFallback("menu.credits", "Credits") : Component.translatable("menu.quit"), var1x -> {
@@ -133,7 +143,7 @@ public class TitleScreen extends Screen {
             } else {
                this.minecraft.stop();
             }
-         }).bounds(this.width / 2 + 2, topPos, 98, 20).build()
+         }).bounds(this.width / 2 + 2, topPos + 24, 98, 20).build()
       );
       this.addRenderableWidget(
          new PlainTextButton(
@@ -343,9 +353,18 @@ public class TitleScreen extends Screen {
          this.fadeWidgets(widgetFade);
       }
 
-      this.extractPanorama(graphics, a);
+      graphics.blit(RenderPipelines.GUI_TEXTURED, FIG_BACKGROUND, 0, 0, 0.0F, 0.0F, this.width, this.height, 960, 540);
+      graphics.fillGradient(0, this.height / 3, this.width, this.height, 0x00000000, 0xB0183442);
+      int menuTop = this.height / 4 + 48;
+      graphics.fill(this.width / 2 - 112, menuTop - 8, this.width / 2 + 112, menuTop + 112, 0x86203F50);
+      graphics.fill(this.width / 2 - 112, menuTop - 8, this.width / 2 + 112, menuTop - 6, 0xFF7CD8F3);
       super.extractRenderState(graphics, mouseX, mouseY, a);
-      this.logoRenderer.extractRenderState(graphics, this.width, this.logoRenderer.keepLogoThroughFade() ? 1.0F : widgetFade);
+      graphics.pose().pushMatrix();
+      graphics.pose().translate(this.width / 2.0F, this.height / 4.0F + 15.0F);
+      graphics.pose().scale(3.0F, 3.0F);
+      graphics.centeredText(this.font, Component.literal("FIG CLIENT").withStyle(net.minecraft.ChatFormatting.AQUA, net.minecraft.ChatFormatting.BOLD),
+         0, 0, ARGB.white(widgetFade));
+      graphics.pose().popMatrix();
       if (this.splash != null && !this.minecraft.options.hideSplashTexts().get()) {
          this.splash.extractRenderState(graphics, this.width, this.font, widgetFade);
       }
@@ -360,7 +379,9 @@ public class TitleScreen extends Screen {
       }
 
       if (net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive()) {
-         // Eagler branding (kept minimal per Matej)
+         // Minimal client branding: keep the Eagler credit line, but make the
+         // running client visibly identify itself as Fig Client on the title screen.
+         graphics.text(this.font, Component.literal("Fig Client"), 2, this.height - 30, ARGB.white(widgetFade));
          graphics.text(this.font, Component.translatableWithFallback("eagler.menu.brand", "Eaglercraft %s",
                   net.lax1dude.eaglercraft.v1_8.EaglercraftVersion.projectForkVersion),
             2, this.height - 20, ARGB.white(widgetFade));
@@ -368,12 +389,19 @@ public class TitleScreen extends Screen {
                   net.lax1dude.eaglercraft.v1_8.EaglercraftVersion.projectForkVendor),
             2, this.height - 10, ARGB.white(widgetFade));
       } else {
+         graphics.text(this.font, Component.literal("Fig Client"), 2, this.height - 20, ARGB.white(widgetFade));
          graphics.text(this.font, versionString, 2, this.height - 10, ARGB.white(widgetFade));
       }
    }
 
    @Override
    public void extractBackground(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a) {
+   }
+
+   @Override
+   protected void extractPanorama(final GuiGraphicsExtractor graphics, final float a) {
+      super.extractPanorama(graphics, a);
+      graphics.fill(0, 0, this.width, this.height, 0x302B8FC0);
    }
 
    private void confirmDemo(final boolean result) {

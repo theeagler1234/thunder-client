@@ -950,12 +950,13 @@ public class SectionRenderDispatcher {
             SectionCompiler compiler = SectionRenderDispatcher.this.sectionCompiler;
             boolean ao = compiler.ambientOcclusion();
             boolean cutout = compiler.cutoutLeaves();
+            boolean xray = compiler.xray();
             Vec3 cameraPos = SectionRenderDispatcher.this.cameraPosition.get();
             // Phase C tuning (Workstream A1): the snapshot build (18³ block reads + 16³×4 tint
             // reads) + codec encode is the per-job main-thread cost we budget. Time it and charge
             // the shared frame budget so runTask's snapshot cap self-regulates the burst.
             double snapStart = meshNowMs();
-            SectionSnapshot snapshot = SectionSnapshotBuilder.build(this.region, sx, sy, sz, ao, cutout, false,
+            SectionSnapshot snapshot = SectionSnapshotBuilder.build(this.region, sx, sy, sz, ao, cutout, xray, false,
                this.isRecompile(), cameraPos.x, cameraPos.y, cameraPos.z);
             double captureEnd = meshNowMs();
             int jobId = SectionRenderDispatcher.this.nextWorkerJobId++;

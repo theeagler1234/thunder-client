@@ -5,13 +5,17 @@ import it.unimi.dsi.fastutil.longs.LongCollection;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap.Entry;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import it.unimi.dsi.fastutil.objects.ObjectListIterator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.SortedSet;
+import java.util.UUID;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.FigBlueprintManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.SectionUpdateTracker;
@@ -60,10 +64,12 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
@@ -76,6 +82,7 @@ public class LevelExtractor implements ResourceManagerReloadListener {
    private @Nullable ClientLevel level;
    private @Nullable SectionUpdateTracker sectionUpdateTracker;
    private final LevelRenderState levelRenderState;
+   private final Map<UUID, EntityOcclusionCache> entityOcclusionCache = new HashMap<>();
    public final DebugRenderer debugRenderer = new DebugRenderer();
    public final GameTestBlockHighlightRenderer gameTestBlockHighlightRenderer = new GameTestBlockHighlightRenderer();
    private final SimpleGizmoCollector mainThreadGizmos = new SimpleGizmoCollector();
@@ -281,10 +288,51 @@ public class LevelExtractor implements ResourceManagerReloadListener {
       } else if (this.levelRenderer.entityRenderDispatcher().shouldRender(entity, frustum, camX, camY, camZ)
          || this.minecraft.player != null && entity.hasIndirectPassenger(this.minecraft.player)) {
          BlockPos blockPos = entity.blockPosition();
-         return this.level.isOutsideBuildHeight(blockPos.getY()) || this.levelRenderer.isSectionCompiledAndVisible(blockPos);
+         return this.level.isOutsideBuildHeight(blockPos.getY())
+            || this.levelRenderer.isSectionCompiledAndVisible(blockPos)
+               && !this.isEntityOccluded(entity, camX, camY, camZ);
       } else {
          return false;
       }
+   }
+
+   private boolean isEntityOccluded(final Entity entity, final double camX, final double camY, final double camZ) {
+      if (!this.minecraft.options.figClientEntityCulling().get() || entity == this.minecraft.player) {
+         return false;
+      }
+
+      BlockPos cameraBlock = BlockPos.containing(camX, camY, camZ);
+      BlockPos entityBlock = entity.blockPosition();
+      long gameTime = this.level.getGameTime();
+      EntityOcclusionCache cached = this.entityOcclusionCache.get(entity.getUUID());
+      if (cached != null && gameTime - cached.gameTime < 4 && cached.cameraBlock.equals(cameraBlock) && cached.entityBlock.equals(entityBlock)) {
+         return !cached.visible;
+      }
+
+      Vec3 cameraPosition = new Vec3(camX, camY, camZ);
+      AABB bounds = entity.getBoundingBox();
+      double middleX = (bounds.minX + bounds.maxX) * 0.5;
+      double middleZ = (bounds.minZ + bounds.maxZ) * 0.5;
+      double middleY = (bounds.minY + bounds.maxY) * 0.5;
+      boolean visible = this.hasClearView(cameraPosition, new Vec3(middleX, middleY, middleZ))
+         || this.hasClearView(cameraPosition, new Vec3(middleX, bounds.maxY, middleZ))
+         || this.hasClearView(cameraPosition, new Vec3(middleX, bounds.minY, middleZ))
+         || this.hasClearView(cameraPosition, new Vec3(bounds.minX, middleY, middleZ))
+         || this.hasClearView(cameraPosition, new Vec3(bounds.maxX, middleY, middleZ));
+
+      if (this.entityOcclusionCache.size() >= 1024) {
+         this.entityOcclusionCache.clear();
+      }
+      this.entityOcclusionCache.put(entity.getUUID(), new EntityOcclusionCache(gameTime, cameraBlock, entityBlock, visible));
+      return !visible;
+   }
+
+   private boolean hasClearView(final Vec3 from, final Vec3 to) {
+      HitResult hit = this.level.clip(new ClipContext(from, to, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, CollisionContext.empty()));
+      return hit.getType() == HitResult.Type.MISS || hit.getLocation().distanceToSqr(to) < 0.04;
+   }
+
+   private record EntityOcclusionCache(long gameTime, BlockPos cameraBlock, BlockPos entityBlock, boolean visible) {
    }
 
    private EntityRenderState extractEntity(final Entity entity, final float partialTickTime) {
@@ -401,6 +449,9 @@ public class LevelExtractor implements ResourceManagerReloadListener {
 
    private void extractGizmos() {
       this.mainThreadGizmos.addTemporaryGizmos(Minecraft.getInstance().getPerTickGizmos());
+      if (this.level != null && this.minecraft.player != null) {
+         FigBlueprintManager.extract(this.level, this.minecraft.player);
+      }
       IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
       if (server != null) {
          this.mainThreadGizmos.addTemporaryGizmos(server.getPerTickGizmos());
@@ -431,6 +482,10 @@ public class LevelExtractor implements ResourceManagerReloadListener {
 
    public void setLevel(final @Nullable ClientLevel level) {
       boolean leavingWorld = this.level != null && level == null;
+      if (this.level != level) {
+         FigBlueprintManager.clear();
+         this.entityOcclusionCache.clear();
+      }
       this.level = level;
       if (level != null) {
          this.levelRenderer.eaglerCancelTrimAfterWorld();

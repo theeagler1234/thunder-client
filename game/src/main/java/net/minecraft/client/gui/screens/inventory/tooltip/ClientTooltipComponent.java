@@ -14,6 +14,7 @@ public interface ClientTooltipComponent {
    static ClientTooltipComponent create(final TooltipComponent component) {
       return switch (component) {
          case BundleTooltip bundleTooltip -> new ClientBundleTooltip(bundleTooltip.contents());
+         case net.minecraft.world.inventory.tooltip.ShulkerBoxTooltip shulkerBoxTooltip -> new ClientShulkerBoxTooltip(shulkerBoxTooltip);
          case ClientActivePlayersTooltip.ActivePlayersTooltip activePlayersTooltip -> new ClientActivePlayersTooltip(activePlayersTooltip);
          default -> throw new IllegalArgumentException("Unknown TooltipComponent");
       };

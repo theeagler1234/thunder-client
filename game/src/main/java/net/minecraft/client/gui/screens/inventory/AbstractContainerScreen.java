@@ -2,12 +2,14 @@ package net.minecraft.client.gui.screens.inventory;
 
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.BundleMouseActions;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.ItemSlotMouseAction;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.input.KeyEvent;
@@ -19,8 +21,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.Nullable;
 
@@ -78,6 +83,98 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
       this.topPos = (this.height - this.imageHeight) / 2;
       this.itemSlotMouseActions.clear();
       this.addItemSlotMouseAction(new BundleMouseActions(this.minecraft));
+      if (this.menu instanceof InventoryMenu || this.menu instanceof ChestMenu || this.menu instanceof ShulkerBoxMenu) {
+         this.addRenderableWidget(
+            Button.builder(Component.literal("Sort"), button -> this.sortStorageItems())
+               .bounds(this.leftPos + this.imageWidth - 54, this.topPos - 24, 50, 20)
+               .build()
+         );
+      }
+   }
+
+   private void sortStorageItems() {
+      if (this.minecraft.player == null || !this.menu.getCarried().isEmpty()) {
+         return;
+      }
+
+      List<Slot> storageSlots = new ArrayList<>();
+      if (this.menu instanceof InventoryMenu) {
+         storageSlots.addAll(this.menu.slots.subList(9, 45));
+      } else {
+         for (Slot slot : this.menu.slots) {
+            if (slot.container == this.minecraft.player.getInventory()) {
+               break;
+            }
+            storageSlots.add(slot);
+         }
+      }
+
+      for (int destinationIndex = 0; destinationIndex < storageSlots.size(); destinationIndex++) {
+         Slot destination = storageSlots.get(destinationIndex);
+         ItemStack destinationStack = destination.getItem();
+         if (destinationStack.isEmpty() || !destinationStack.isStackable() || destinationStack.getCount() >= destination.getMaxStackSize(destinationStack)) {
+            continue;
+         }
+
+         for (int sourceIndex = destinationIndex + 1; sourceIndex < storageSlots.size(); sourceIndex++) {
+            Slot source = storageSlots.get(sourceIndex);
+            ItemStack sourceStack = source.getItem();
+            if (!sourceStack.isEmpty()
+               && ItemStack.isSameItemSameComponents(destinationStack, sourceStack)
+               && source.mayPickup(this.minecraft.player)) {
+               this.sendPickup(source);
+               this.sendPickup(destination);
+               this.sendPickup(source);
+               destinationStack = destination.getItem();
+               if (destinationStack.getCount() >= destination.getMaxStackSize(destinationStack)) {
+                  break;
+               }
+            }
+         }
+      }
+
+      List<ItemStack> sortedItems = storageSlots.stream()
+         .map(slot -> slot.getItem().copy())
+         .sorted(
+            Comparator.<ItemStack>comparingInt(item -> item.isEmpty() ? 1 : 0)
+               .thenComparing(item -> item.isEmpty() ? "" : item.getHoverName().getString(), String.CASE_INSENSITIVE_ORDER)
+               .thenComparing(Comparator.comparingInt(ItemStack::getCount).reversed())
+         )
+         .toList();
+
+      for (int targetIndex = 0; targetIndex < storageSlots.size(); targetIndex++) {
+         Slot target = storageSlots.get(targetIndex);
+         ItemStack wanted = sortedItems.get(targetIndex);
+         if (ItemStack.matches(target.getItem(), wanted)) {
+            continue;
+         }
+
+         int sourceIndex = targetIndex + 1;
+         while (sourceIndex < storageSlots.size() && !ItemStack.matches(storageSlots.get(sourceIndex).getItem(), wanted)) {
+            sourceIndex++;
+         }
+         if (sourceIndex >= storageSlots.size()) {
+            continue;
+         }
+
+         Slot source = storageSlots.get(sourceIndex);
+         if (!target.mayPickup(this.minecraft.player)
+            || !source.mayPickup(this.minecraft.player)
+            || !target.mayPlace(source.getItem())
+            || !source.mayPlace(target.getItem())) {
+            continue;
+         }
+
+         this.sendPickup(target);
+         this.sendPickup(source);
+         this.sendPickup(target);
+      }
+   }
+
+   private void sendPickup(final Slot slot) {
+      this.minecraft.gameMode.handleContainerInput(
+         this.menu.containerId, slot.index, 0, ContainerInput.PICKUP, this.minecraft.player
+      );
    }
 
    protected void addItemSlotMouseAction(final ItemSlotMouseAction itemSlotMouseAction) {

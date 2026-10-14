@@ -51,6 +51,7 @@ import net.minecraft.client.sounds.SoundEngine;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.client.sounds.SoundPreviewHandler;
 import net.minecraft.client.tutorial.TutorialSteps;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
@@ -105,7 +106,86 @@ public class Options {
    }, OptionInstance.UnitDouble.INSTANCE, 0.5, OptionInstance.NO_ACTION);
    private final OptionInstance<Integer> renderDistance;
    private final OptionInstance<Integer> simulationDistance;
+   private final OptionInstance<Boolean> figClientFullbright = OptionInstance.createBoolean(
+      "figClientFullbright", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Boolean> figClientZoom = OptionInstance.createBoolean(
+      "figClientZoom", OptionInstance.noTooltip(), true
+   );
+   private final OptionInstance<Boolean> figClientCompass = OptionInstance.createBoolean(
+      "figClientCompass", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Integer> figClientCompassX = figClientPositionOption("figClientCompassX");
+   private final OptionInstance<Integer> figClientCompassY = figClientPositionOption("figClientCompassY");
+   private final OptionInstance<Boolean> figClientEquipmentHud = OptionInstance.createBoolean(
+      "figClientEquipmentHud", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Integer> figClientEquipmentHudX = figClientPositionOption("figClientEquipmentHudX");
+   private final OptionInstance<Integer> figClientEquipmentHudY = figClientPositionOption("figClientEquipmentHudY");
+   private final OptionInstance<Integer> figClientHotbarX = figClientPositionOption("figClientHotbarX");
+   private final OptionInstance<Integer> figClientHotbarY = figClientPositionOption("figClientHotbarY");
+   private final OptionInstance<Boolean> figClientInventoryAlerts = OptionInstance.createBoolean(
+      "figClientInventoryAlerts", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<String> figClientBlockSearch = new OptionInstance<>(
+      "figClientBlockSearch",
+      OptionInstance.noTooltip(),
+      (caption, value) -> Component.literal(value),
+      new OptionInstance.LazyEnum<>(() -> List.of(""), Optional::of, Codec.STRING),
+      "",
+      OptionInstance.NO_ACTION
+   );
+   private final OptionInstance<String> figClientLatestDeath = new OptionInstance<>(
+      "figClientLatestDeath",
+      OptionInstance.noTooltip(),
+      (caption, value) -> Component.literal(value),
+      new OptionInstance.LazyEnum<>(() -> List.of(""), Optional::of, Codec.STRING),
+      "",
+      OptionInstance.NO_ACTION
+   );
+   private final OptionInstance<String> figClientPreviousDeath = new OptionInstance<>(
+      "figClientPreviousDeath",
+      OptionInstance.noTooltip(),
+      (caption, value) -> Component.literal(value),
+      new OptionInstance.LazyEnum<>(() -> List.of(""), Optional::of, Codec.STRING),
+      "",
+      OptionInstance.NO_ACTION
+   );
+   private final OptionInstance<Boolean> figClientChunkSaver = OptionInstance.createBoolean(
+      "figClientChunkSaver", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Boolean> figClientEntityCulling = OptionInstance.createBoolean(
+      "figClientEntityCulling", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Boolean> figClientAutoRefill = OptionInstance.createBoolean(
+      "figClientAutoRefill", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Boolean> figClientAutoTotem = OptionInstance.createBoolean(
+      "figClientAutoTotem", OptionInstance.noTooltip(), false
+   );
+   private final OptionInstance<Integer> figClientAutoTotemHealth = new OptionInstance<>(
+      "figClientAutoTotemHealth",
+      OptionInstance.noTooltip(),
+      (caption, value) -> genericValueLabel(caption, Component.literal(value / 2.0 + " hearts")),
+      new OptionInstance.IntRange(2, 20),
+      8,
+      OptionInstance.NO_ACTION
+   );
+   private final OptionInstance<Boolean> figClientXray = OptionInstance.createBoolean(
+      "figClientXray", OptionInstance.noTooltip(), false, value -> operateOnLevelExtractor(LevelExtractor::allChanged)
+   );
    private int serverRenderDistance = 0;
+
+   private static OptionInstance<Integer> figClientPositionOption(final String name) {
+      return new OptionInstance<>(
+         name,
+         OptionInstance.noTooltip(),
+         (caption, value) -> genericValueLabel(caption, value),
+         new OptionInstance.IntRange(-4096, 4096),
+         0,
+         OptionInstance.NO_ACTION
+      );
+   }
    private final OptionInstance<Double> entityDistanceScaling = new OptionInstance<>(
       "options.entityDistanceScaling",
       OptionInstance.noTooltip(),
@@ -162,7 +242,7 @@ public class Options {
       GraphicsPreset.CODEC,
       // Eagler (web): the preset is re-applied EVERY boot (Minecraft.<init>), so the
       // default preset decides the real defaults. FAST on web (Matej 2026-07-11) —
-      // and GraphicsPreset.FAST itself is web-tuned to renderDistance 6 / sim 5.
+      // and GraphicsPreset.FAST itself is web-tuned to renderDistance 3 / sim 3.
       net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.webGpuBackendFactory != null
          ? GraphicsPreset.FAST
          : GraphicsPreset.FANCY,
@@ -703,6 +783,17 @@ public class Options {
    public final KeyMapping keySocialInteractions = new KeyMapping("key.socialInteractions", 80, KeyMapping.Category.MULTIPLAYER);
    public final KeyMapping keyScreenshot = new KeyMapping("key.screenshot", 291, KeyMapping.Category.MISC);
    public final KeyMapping keyTogglePerspective = new KeyMapping("key.togglePerspective", 294, KeyMapping.Category.MISC);
+   public final KeyMapping keyToggleFigModules = new KeyMapping("key.fig.modules", InputConstants.Type.KEYSYM, InputConstants.KEY_RSHIFT, KeyMapping.Category.MISC);
+   public final KeyMapping keyFigZoom = new KeyMapping("key.fig.zoom", InputConstants.Type.KEYSYM, 67, KeyMapping.Category.MISC);
+   public final KeyMapping keyToggleChunkSaver = new KeyMapping("key.fig.chunkSaver", InputConstants.Type.KEYSYM, InputConstants.KEY_RALT, KeyMapping.Category.MISC);
+   public final KeyMapping keyFigFullbright = new KeyMapping("key.fig.fullbright", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigCompass = new KeyMapping("key.fig.compass", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigEquipmentHud = new KeyMapping("key.fig.equipmentHud", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigInventoryAlerts = new KeyMapping("key.fig.inventoryAlerts", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigAutoRefill = new KeyMapping("key.fig.autoRefill", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigEntityCulling = new KeyMapping("key.fig.entityCulling", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigXray = new KeyMapping("key.fig.xray", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
+   public final KeyMapping keyFigAutoTotem = new KeyMapping("key.fig.autoTotem", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
    public final KeyMapping keySmoothCamera = new KeyMapping("key.smoothCamera", InputConstants.UNKNOWN.getValue(), KeyMapping.Category.MISC);
    public final KeyMapping keyFullscreen = new KeyMapping("key.fullscreen", 300, KeyMapping.Category.MISC);
    public final KeyMapping keyAdvancements = new KeyMapping("key.advancements", 76, KeyMapping.Category.MISC);
@@ -799,6 +890,17 @@ public class Options {
             this.keyToggleSpectatorShaderEffects,
             this.keyScreenshot,
             this.keyTogglePerspective,
+            this.keyToggleFigModules,
+            this.keyFigZoom,
+            this.keyToggleChunkSaver,
+            this.keyFigFullbright,
+            this.keyFigCompass,
+            this.keyFigEquipmentHud,
+            this.keyFigInventoryAlerts,
+            this.keyFigAutoRefill,
+            this.keyFigEntityCulling,
+            this.keyFigXray,
+            this.keyFigAutoTotem,
             this.keySmoothCamera,
             this.keyFullscreen,
             this.keySpectatorOutlines,
@@ -1043,6 +1145,91 @@ public class Options {
 
    public OptionInstance<Integer> simulationDistance() {
       return this.simulationDistance;
+   }
+
+   public OptionInstance<Boolean> figClientFullbright() {
+      return this.figClientFullbright;
+   }
+
+   public OptionInstance<Boolean> figClientZoom() {
+      return this.figClientZoom;
+   }
+
+   public OptionInstance<Boolean> figClientCompass() {
+      return this.figClientCompass;
+   }
+
+   public OptionInstance<Integer> figClientCompassX() {
+      return this.figClientCompassX;
+   }
+
+   public OptionInstance<Integer> figClientCompassY() {
+      return this.figClientCompassY;
+   }
+
+   public OptionInstance<Boolean> figClientEquipmentHud() {
+      return this.figClientEquipmentHud;
+   }
+
+   public OptionInstance<Integer> figClientEquipmentHudX() {
+      return this.figClientEquipmentHudX;
+   }
+
+   public OptionInstance<Integer> figClientEquipmentHudY() {
+      return this.figClientEquipmentHudY;
+   }
+
+   public OptionInstance<Integer> figClientHotbarX() {
+      return this.figClientHotbarX;
+   }
+
+   public OptionInstance<Integer> figClientHotbarY() {
+      return this.figClientHotbarY;
+   }
+
+   public OptionInstance<Boolean> figClientInventoryAlerts() {
+      return this.figClientInventoryAlerts;
+   }
+
+   public OptionInstance<String> figClientBlockSearch() {
+      return this.figClientBlockSearch;
+   }
+
+   public OptionInstance<String> figClientLatestDeath() {
+      return this.figClientLatestDeath;
+   }
+
+   public OptionInstance<String> figClientPreviousDeath() {
+      return this.figClientPreviousDeath;
+   }
+
+   public void recordFigDeathWaypoint(final BlockPos position, final String dimension) {
+      this.figClientPreviousDeath.set(this.figClientLatestDeath.get());
+      this.figClientLatestDeath.set(dimension + "|" + position.getX() + "|" + position.getY() + "|" + position.getZ());
+   }
+
+   public OptionInstance<Boolean> figClientChunkSaver() {
+      return this.figClientChunkSaver;
+   }
+
+   public OptionInstance<Boolean> figClientEntityCulling() {
+      return this.figClientEntityCulling;
+   }
+
+   public OptionInstance<Boolean> figClientAutoRefill() {
+      return this.figClientAutoRefill;
+   }
+
+   public OptionInstance<Boolean> figClientAutoTotem() {
+      return this.figClientAutoTotem;
+   }
+
+   public OptionInstance<Integer> figClientAutoTotemHealth() {
+      return this.figClientAutoTotemHealth;
+   }
+
+   public OptionInstance<Boolean> figClientXray() {
+      return this.figClientXray;
    }
 
    public OptionInstance<Double> entityDistanceScaling() {
@@ -1517,7 +1704,7 @@ public class Options {
       this.optionsFile = new File(workingDirectory, "options.txt");
       boolean largeDistances = Runtime.getRuntime().maxMemory() >= 1000000000L;
       // Eagler (web): single-thread meshing + worldgen make big view distances the #1
-      // frame-time cost — default 6/5 chunks (eag26 low-end profile; Matej 2026-07-11).
+      // frame-time cost — default 3/3 chunks (eag26 low-end profile).
       // A saved options.txt still overrides these defaults via load() below.
       boolean eaglerWeb = net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.webGpuBackendFactory != null;
       this.renderDistance = new OptionInstance<>(
@@ -1594,6 +1781,26 @@ public class Options {
       access.process("cloudRange", this.cloudRange);
       access.process("renderDistance", this.renderDistance);
       access.process("simulationDistance", this.simulationDistance);
+      access.process("figClientFullbright", this.figClientFullbright);
+      access.process("figClientZoom", this.figClientZoom);
+      access.process("figClientCompass", this.figClientCompass);
+      access.process("figClientCompassX", this.figClientCompassX);
+      access.process("figClientCompassY", this.figClientCompassY);
+      access.process("figClientEquipmentHud", this.figClientEquipmentHud);
+      access.process("figClientEquipmentHudX", this.figClientEquipmentHudX);
+      access.process("figClientEquipmentHudY", this.figClientEquipmentHudY);
+      access.process("figClientHotbarX", this.figClientHotbarX);
+      access.process("figClientHotbarY", this.figClientHotbarY);
+      access.process("figClientInventoryAlerts", this.figClientInventoryAlerts);
+      access.process("figClientBlockSearch", this.figClientBlockSearch);
+      access.process("figClientLatestDeath", this.figClientLatestDeath);
+      access.process("figClientPreviousDeath", this.figClientPreviousDeath);
+      access.process("figClientChunkSaver", this.figClientChunkSaver);
+      access.process("figClientEntityCulling", this.figClientEntityCulling);
+      access.process("figClientAutoRefill", this.figClientAutoRefill);
+      access.process("figClientAutoTotem", this.figClientAutoTotem);
+      access.process("figClientAutoTotemHealth", this.figClientAutoTotemHealth);
+      access.process("figClientXray", this.figClientXray);
       access.process("screenEffectScale", this.screenEffectScale);
       access.process("soundDevice", this.soundDevice);
       access.process("vignette", this.vignette);
@@ -2081,7 +2288,7 @@ public class Options {
 
       return new ClientInformation(
          this.languageCode,
-         this.renderDistance.get(),
+         this.getEffectiveRenderDistance(),
          this.chatVisibility.get(),
          this.chatColors.get(),
          parts,
@@ -2203,7 +2410,12 @@ public class Options {
    }
 
    public int getEffectiveRenderDistance() {
-      return this.serverRenderDistance > 0 ? Math.min(this.renderDistance.get(), this.serverRenderDistance) : this.renderDistance.get();
+      int requestedDistance = this.figClientChunkSaver.get() ? Math.min(this.renderDistance.get(), 2) : this.renderDistance.get();
+      return this.serverRenderDistance > 0 ? Math.min(requestedDistance, this.serverRenderDistance) : requestedDistance;
+   }
+
+   public int getEffectiveSimulationDistance() {
+      return this.figClientChunkSaver.get() ? Math.min(this.simulationDistance.get(), 2) : this.simulationDistance.get();
    }
 
    private static Component pixelValueLabel(final Component caption, final int value) {

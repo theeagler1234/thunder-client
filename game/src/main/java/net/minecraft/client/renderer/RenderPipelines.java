@@ -601,6 +601,12 @@ public class RenderPipelines {
    public static final RenderPipeline DEBUG_FILLED_BOX = register(
       RenderPipeline.builder(DEBUG_FILLED_SNIPPET).withLocation("pipeline/debug_filled_box").build()
    );
+   public static final RenderPipeline FIG_BLOCK_SEARCH = register(
+      RenderPipeline.builder(DEBUG_FILLED_SNIPPET)
+         .withLocation("pipeline/fig_block_search")
+         .withDepthStencilState(Optional.empty())
+         .build()
+   );
    public static final RenderPipeline DEBUG_QUADS = register(
       RenderPipeline.builder(DEBUG_FILLED_SNIPPET).withLocation("pipeline/debug_quads").withCull(false).build()
    );

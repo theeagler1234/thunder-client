@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.WaypointStyle;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
@@ -14,6 +15,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.waypoints.PartialTickSupplier;
 import net.minecraft.world.waypoints.TrackedWaypoint;
 import net.minecraft.world.waypoints.Waypoint;
+import java.util.Optional;
+import java.util.UUID;
 
 public class LocatorBar implements ContextualBar {
    private static final Identifier LOCATOR_BAR_BACKGROUND = Identifier.withDefaultNamespace("hud/locator_bar_background");
@@ -25,7 +28,10 @@ public class LocatorBar implements ContextualBar {
    private static final int ARROW_HEIGHT = 5;
    private static final int ARROW_LEFT = 1;
    private static final int ARROW_PADDING = 1;
+   private static final UUID LATEST_DEATH_ID = UUID.fromString("06bf784b-f5dc-4699-b427-b87e4696452a");
    private final Minecraft minecraft;
+   private GlobalPos cachedDeathLocation;
+   private TrackedWaypoint cachedDeathWaypoint;
 
    public LocatorBar(final Minecraft minecraft) {
       this.minecraft = minecraft;
@@ -50,45 +56,67 @@ public class LocatorBar implements ContextualBar {
             .player
             .connection
             .getWaypointManager()
-            .forEachWaypoint(
-               cameraEntity,
-               waypoint -> {
-                  if (!waypoint.id().left().map(uuid -> uuid.equals(cameraEntity.getUUID())).orElse(false)) {
-                     double angle = waypoint.yawAngleToCamera(level, this.minecraft.gameRenderer.mainCamera(), partialTickSupplier);
-                     if (!(angle <= -60.0) && !(angle > 60.0)) {
-                        int screenMiddle = Mth.ceil((graphics.guiWidth() - 9) / 2.0F);
-                        Waypoint.Icon icon = waypoint.icon();
-                        WaypointStyle style = this.minecraft.gui.hud.getWaypointStyles().get(icon.style);
-                        float distance = Mth.sqrt((float)waypoint.distanceSquared(cameraEntity));
-                        Identifier sprite = style.sprite(distance);
-                        int color = icon.color
-                           .orElseGet(
-                              () -> (Integer)waypoint.id()
-                                 .map(
-                                    uuid -> ARGB.setBrightness(ARGB.color(255, uuid.hashCode()), 0.9F),
-                                    name -> ARGB.setBrightness(ARGB.color(255, name.hashCode()), 0.9F)
-                                 )
-                           );
-                        int dotPosition = Mth.floor(angle * 173.0 / 2.0 / 60.0);
-                        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, screenMiddle + dotPosition, top - 2, 9, 9, color);
-                        TrackedWaypoint.PitchDirection pitchDirection = waypoint.pitchDirectionToCamera(level, this.minecraft.gameRenderer, partialTickSupplier);
-                        if (pitchDirection != TrackedWaypoint.PitchDirection.NONE) {
-                           int arrowTop;
-                           Identifier arrowSprite;
-                           if (pitchDirection == TrackedWaypoint.PitchDirection.DOWN) {
-                              arrowTop = 6;
-                              arrowSprite = LOCATOR_BAR_ARROW_DOWN;
-                           } else {
-                              arrowTop = -6;
-                              arrowSprite = LOCATOR_BAR_ARROW_UP;
-                           }
+            .forEachWaypoint(cameraEntity, waypoint -> this.extractWaypoint(graphics, top, level, cameraEntity, partialTickSupplier, waypoint));
 
-                           graphics.blitSprite(RenderPipelines.GUI_TEXTURED, arrowSprite, screenMiddle + dotPosition + 1, top + arrowTop, 7, 5);
-                        }
-                     }
-                  }
+         Optional<GlobalPos> deathLocation = this.minecraft.player.getLastDeathLocation();
+         if (deathLocation.isPresent() && deathLocation.get().dimension().equals(level.dimension())) {
+            GlobalPos location = deathLocation.get();
+            if (!location.equals(this.cachedDeathLocation)) {
+               Waypoint.Icon icon = new Waypoint.Icon();
+               icon.color = Optional.of(ARGB.color(255, 0xF05A5A));
+               this.cachedDeathWaypoint = TrackedWaypoint.setPosition(LATEST_DEATH_ID, icon, location.pos());
+               this.cachedDeathLocation = location;
+            }
+
+            this.extractWaypoint(graphics, top, level, cameraEntity, partialTickSupplier, this.cachedDeathWaypoint);
+         } else {
+            this.cachedDeathLocation = null;
+            this.cachedDeathWaypoint = null;
+         }
+      }
+   }
+
+   private void extractWaypoint(
+      final GuiGraphicsExtractor graphics,
+      final int top,
+      final Level level,
+      final Entity cameraEntity,
+      final PartialTickSupplier partialTickSupplier,
+      final TrackedWaypoint waypoint
+   ) {
+      if (!waypoint.id().left().map(uuid -> uuid.equals(cameraEntity.getUUID())).orElse(false)) {
+         double angle = waypoint.yawAngleToCamera(level, this.minecraft.gameRenderer.mainCamera(), partialTickSupplier);
+         if (!(angle <= -60.0) && !(angle > 60.0)) {
+            int screenMiddle = Mth.ceil((graphics.guiWidth() - 9) / 2.0F);
+            Waypoint.Icon icon = waypoint.icon();
+            WaypointStyle style = this.minecraft.gui.hud.getWaypointStyles().get(icon.style);
+            float distance = Mth.sqrt((float)waypoint.distanceSquared(cameraEntity));
+            Identifier sprite = style.sprite(distance);
+            int color = icon.color
+               .orElseGet(
+                  () -> (Integer)waypoint.id()
+                     .map(
+                        uuid -> ARGB.setBrightness(ARGB.color(255, uuid.hashCode()), 0.9F),
+                        name -> ARGB.setBrightness(ARGB.color(255, name.hashCode()), 0.9F)
+                     )
+               );
+            int dotPosition = Mth.floor(angle * 173.0 / 2.0 / 60.0);
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, screenMiddle + dotPosition, top - 2, 9, 9, color);
+            TrackedWaypoint.PitchDirection pitchDirection = waypoint.pitchDirectionToCamera(level, this.minecraft.gameRenderer, partialTickSupplier);
+            if (pitchDirection != TrackedWaypoint.PitchDirection.NONE) {
+               int arrowTop;
+               Identifier arrowSprite;
+               if (pitchDirection == TrackedWaypoint.PitchDirection.DOWN) {
+                  arrowTop = 6;
+                  arrowSprite = LOCATOR_BAR_ARROW_DOWN;
+               } else {
+                  arrowTop = -6;
+                  arrowSprite = LOCATOR_BAR_ARROW_UP;
                }
-            );
+
+               graphics.blitSprite(RenderPipelines.GUI_TEXTURED, arrowSprite, screenMiddle + dotPosition + 1, top + arrowTop, 7, 5);
+            }
+         }
       }
    }
 }

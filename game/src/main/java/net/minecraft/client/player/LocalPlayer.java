@@ -946,6 +946,11 @@ public class LocalPlayer extends AbstractClientPlayer {
 
    @Override
    protected void tickDeath() {
+      if (this.deathTime == 0) {
+         this.minecraft.options.recordFigDeathWaypoint(this.blockPosition(), this.level().dimension().identifier().toString());
+         this.minecraft.options.save();
+      }
+
       this.deathTime++;
       if (this.deathTime == 20) {
          this.remove(Entity.RemovalReason.KILLED);

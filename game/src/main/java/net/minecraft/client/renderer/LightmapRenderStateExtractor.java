@@ -65,13 +65,16 @@ public class LightmapRenderStateExtractor {
             }
 
             renderState.ambientColor = ARGB.vector3fFromRGB24(camera.attributeProbe().getValue(EnvironmentAttributes.AMBIENT_LIGHT_COLOR, partialTicks));
-            float brightnessOption = this.minecraft.options.gamma().get().floatValue();
-            float darknessEffectScaleOption = this.minecraft.options.darknessEffectScale().get().floatValue();
+            boolean figFullbright = this.minecraft.options.figClientFullbright().get();
+            float brightnessOption = figFullbright ? 1.0F : this.minecraft.options.gamma().get().floatValue();
+            float darknessEffectScaleOption = figFullbright ? 0.0F : this.minecraft.options.darknessEffectScale().get().floatValue();
             float darknessEffectBrightnessModifier = player.getEffectBlendFactor(MobEffects.DARKNESS, partialTicks) * darknessEffectScaleOption;
             renderState.brightness = Math.max(0.0F, brightnessOption - darknessEffectBrightnessModifier);
             renderState.darknessEffectScale = this.calculateDarknessScale(player, darknessEffectBrightnessModifier, partialTicks) * darknessEffectScaleOption;
             float waterVision = player.getWaterVision();
-            if (player.hasEffect(MobEffects.NIGHT_VISION)) {
+            if (figFullbright) {
+               renderState.nightVisionEffectIntensity = 1.0F;
+            } else if (player.hasEffect(MobEffects.NIGHT_VISION)) {
                renderState.nightVisionEffectIntensity = GameRenderer.nightVisionScale(player, partialTicks);
             } else if (waterVision > 0.0F && player.hasEffect(MobEffects.CONDUIT_POWER)) {
                renderState.nightVisionEffectIntensity = waterVision;

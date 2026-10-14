@@ -58,6 +58,32 @@ tasks.register<JavaExec>("buildAssetsEPK") {
 	)
 }
 
+val soundEPKResources = layout.buildDirectory.dir("sound-epk-resources")
+val prepareSoundEPKResources = tasks.register<Sync>("prepareSoundEPKResources") {
+	group = "eaglercraft"
+	dependsOn(":game:processResources")
+	from(project(":game").layout.projectDirectory.dir("src/main/resources")) {
+		include("assets/minecraft/sounds/**")
+	}
+	into(soundEPKResources)
+}
+
+tasks.register<JavaExec>("buildSoundsEPK") {
+	group = "eaglercraft"
+	description = "Pack Minecraft sound resources into sounds.epk"
+	dependsOn(prepareSoundEPKResources)
+	inputs.dir(soundEPKResources).withPathSensitivity(PathSensitivity.RELATIVE)
+	outputs.file(layout.buildDirectory.file("epk/sounds.epk"))
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass = "net.lax1dude.eaglercraft.v1_8.sp.server.export.EPKPackagerMain"
+	args(
+		soundEPKResources.get().asFile.absolutePath,
+		layout.buildDirectory.file("epk/sounds.epk").get().asFile.absolutePath,
+		"sounds.epk",
+		"--include-web-unreachable"
+	)
+}
+
 // Audit-only baseline for measuring the exact archive cost of entries excluded
 // by buildAssetsEPK. It is deliberately not a dependency of any regular build.
 tasks.register<JavaExec>("buildAssetsEPKWithWebUnreachable") {
