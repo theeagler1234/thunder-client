@@ -14,6 +14,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.component.BlockItemStateProperties;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.world.inventory.tooltip.ShulkerBoxTooltip;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
@@ -26,6 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 public class BlockItem extends Item {
@@ -184,6 +187,18 @@ public class BlockItem extends Item {
 
    public Block getBlock() {
       return this.block;
+   }
+
+   @Override
+   public Optional<TooltipComponent> getTooltipImage(final ItemStack itemStack) {
+      if (this.block instanceof ShulkerBoxBlock) {
+         ItemContainerContents contents = itemStack.get(DataComponents.CONTAINER);
+         if (contents != null) {
+            return Optional.of(new ShulkerBoxTooltip(contents));
+         }
+      }
+
+      return Optional.empty();
    }
 
    public void registerBlocks(final Map<Block, Item> map, final Item item) {

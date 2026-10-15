@@ -179,7 +179,7 @@ public final class SectionSnapshotBuilder {
 	}
 
 	public static SectionSnapshot build(final BlockAndTintGetter region, final int sectionX, final int sectionY,
-			final int sectionZ, final boolean ambientOcclusion, final boolean cutoutLeaves, final boolean isDebug,
+			final int sectionZ, final boolean ambientOcclusion, final boolean cutoutLeaves, final boolean xray, final boolean isDebug,
 			final boolean isRecompile, final double cameraX, final double cameraY, final double cameraZ) {
 		Scratch scratch = acquireScratch();
 		SectionSnapshot s = scratch.prepare();
@@ -196,7 +196,7 @@ public final class SectionSnapshotBuilder {
 		s.cameraRelY = (float) (cameraY - minBlockY);
 		s.cameraRelZ = (float) (cameraZ - minBlockZ);
 
-		s.flags = (ambientOcclusion ? 1 : 0) | (cutoutLeaves ? 2 : 0) | (isDebug ? 4 : 0) | (isRecompile ? 8 : 0);
+		s.flags = (ambientOcclusion ? 1 : 0) | (cutoutLeaves ? 2 : 0) | (isDebug ? 4 : 0) | (isRecompile ? 8 : 0) | (xray ? 16 : 0);
 
 		BlockPos.MutableBlockPos pos = scratch.pos;
 

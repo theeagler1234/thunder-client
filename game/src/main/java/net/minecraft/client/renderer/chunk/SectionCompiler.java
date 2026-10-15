@@ -30,11 +30,13 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.tags.BlockItemTags;
 import org.jspecify.annotations.Nullable;
 
 public class SectionCompiler {
    private final boolean ambientOcclusion;
    private final boolean cutoutLeaves;
+   private final boolean xray;
    private final BlockStateModelSet blockModelSet;
    private final FluidStateModelSet fluidModelSet;
    private final BlockColors blockColors;
@@ -42,12 +44,14 @@ public class SectionCompiler {
    public SectionCompiler(
       final boolean ambientOcclusion,
       final boolean cutoutLeaves,
+      final boolean xray,
       final BlockStateModelSet blockModelSet,
       final FluidStateModelSet fluidModelSet,
       final BlockColors blockColors
    ) {
       this.ambientOcclusion = ambientOcclusion;
       this.cutoutLeaves = cutoutLeaves;
+      this.xray = xray;
       this.blockModelSet = blockModelSet;
       this.fluidModelSet = fluidModelSet;
       this.blockColors = blockColors;
@@ -62,6 +66,10 @@ public class SectionCompiler {
 
    public boolean cutoutLeaves() {
       return this.cutoutLeaves;
+   }
+
+   public boolean xray() {
+      return this.xray;
    }
 
    // Mesh-worker plan Phase B: widened from the concrete RenderSectionRegion to the
@@ -96,7 +104,8 @@ public class SectionCompiler {
          BlockState blockState = region.getBlockState(pos);
          if (!blockState.isAir()) {
             try {
-               if (blockState.isSolidRender()) {
+               if (!this.xray || isOre(blockState)) {
+               if (!this.xray && blockState.isSolidRender()) {
                   visGraph.setOpaque(pos);
                }
 
@@ -135,6 +144,7 @@ public class SectionCompiler {
                      blockState.getSeed(pos)
                   );
                }
+               }
             } catch (Throwable t) {
                CrashReport report = CrashReport.forThrowable(t, "Tesselating block in world");
                CrashReportCategory category = report.addCategory("Block being tesselated");
@@ -159,6 +169,17 @@ public class SectionCompiler {
       BlockModelLighter.clearCache();
       results.visibilitySet = visGraph.resolve();
       return results;
+   }
+
+   private static boolean isOre(final BlockState state) {
+      return state.is(BlockItemTags.COAL_ORES.block())
+         || state.is(BlockItemTags.COPPER_ORES.block())
+         || state.is(BlockItemTags.DIAMOND_ORES.block())
+         || state.is(BlockItemTags.EMERALD_ORES.block())
+         || state.is(BlockItemTags.GOLD_ORES.block())
+         || state.is(BlockItemTags.IRON_ORES.block())
+         || state.is(BlockItemTags.LAPIS_ORES.block())
+         || state.is(BlockItemTags.REDSTONE_ORES.block());
    }
 
    private BufferBuilder getOrBeginLayer(

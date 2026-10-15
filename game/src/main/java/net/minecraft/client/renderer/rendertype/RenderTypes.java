@@ -350,6 +350,9 @@ public class RenderTypes {
       "debug_filled_box",
       RenderSetup.builder(RenderPipelines.DEBUG_FILLED_BOX).sortOnUpload().setLayeringTransform(LayeringTransform.VIEW_OFFSET_Z_LAYERING).createRenderSetup()
    );
+   private static final RenderType FIG_BLOCK_SEARCH = RenderType.create(
+      "fig_block_search", RenderSetup.builder(RenderPipelines.FIG_BLOCK_SEARCH).sortOnUpload().createRenderSetup()
+   );
    private static final RenderType DEBUG_POINT = RenderType.create("debug_point", RenderSetup.builder(RenderPipelines.DEBUG_POINTS).createRenderSetup());
    private static final RenderType DEBUG_QUADS = RenderType.create(
       "debug_quads", RenderSetup.builder(RenderPipelines.DEBUG_QUADS).sortOnUpload().createRenderSetup()
@@ -621,6 +624,10 @@ public class RenderTypes {
 
    public static RenderType debugFilledBox() {
       return DEBUG_FILLED_BOX;
+   }
+
+   public static RenderType figBlockSearch() {
+      return FIG_BLOCK_SEARCH;
    }
 
    public static RenderType debugPoint() {

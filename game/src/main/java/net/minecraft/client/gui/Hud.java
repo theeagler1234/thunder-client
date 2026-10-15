@@ -27,6 +27,7 @@ import net.minecraft.client.gui.contextualbar.ExperienceBar;
 import net.minecraft.client.gui.contextualbar.JumpableVehicleBar;
 import net.minecraft.client.gui.contextualbar.LocatorBar;
 import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.gui.screens.options.FigBlockSearch;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.Lightmap;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -216,11 +217,15 @@ public class Hud {
    }
 
    public void extractRenderState(final GuiGraphicsExtractor graphics, final DeltaTracker deltaTracker) {
+      FigBlockSearch.tick(this.minecraft);
       this.minecraft.gameRenderer.gameRenderState().guiRenderState.isHudHidden = this.isHidden;
       if (!(this.minecraft.gui.screen() instanceof LevelLoadingScreen)) {
          if (!this.isHidden) {
             this.extractCameraOverlays(graphics, deltaTracker);
             this.extractCrosshair(graphics, deltaTracker);
+            this.extractFigCompass(graphics);
+            this.extractFigEquipmentHud(graphics);
+            this.extractFigInventoryAlerts(graphics);
             graphics.nextStratum();
             this.extractHotbarAndDecorations(graphics, deltaTracker);
             this.extractEffects(graphics, deltaTracker);
@@ -239,6 +244,97 @@ public class Hud {
          } else if (this.minecraft.gui.screen() != null && this.minecraft.gui.screen().isInGameUi()) {
             this.extractSubtitleOverlay(graphics, true);
          }
+      }
+   }
+
+   private void extractFigCompass(final GuiGraphicsExtractor graphics) {
+      LocalPlayer player = this.minecraft.player;
+      if (!this.minecraft.options.figClientCompass().get() || player == null || this.minecraft.gui.screen() != null) {
+         return;
+      }
+
+      int centerX = graphics.guiWidth() / 2 + this.minecraft.options.figClientCompassX().get();
+      int centerY = 38 + this.minecraft.options.figClientCompassY().get();
+      for (int y = -16; y <= 16; y++) {
+         int halfWidth = (int)Math.sqrt(16 * 16 - y * y);
+         graphics.fill(centerX - halfWidth - 2, centerY + y, centerX + halfWidth + 2, centerY + y + 1, 0xB0204560);
+         int innerWidth = (int)Math.sqrt(14 * 14 - y * y);
+         graphics.fill(centerX - innerWidth, centerY + y, centerX + innerWidth, centerY + y + 1, 0xA8102234);
+      }
+
+      double yaw = Math.toRadians(player.getYRot());
+      float sin = (float)Math.sin(yaw);
+      float cos = (float)Math.cos(yaw);
+      drawCompassDirection(graphics, "N", centerX + Math.round(14 * sin), centerY + Math.round(14 * cos), 0xFF7CD8F3);
+      drawCompassDirection(graphics, "S", centerX - Math.round(14 * sin), centerY - Math.round(14 * cos), 0xFFB9D8E8);
+      drawCompassDirection(graphics, "E", centerX - Math.round(14 * cos), centerY + Math.round(14 * sin), 0xFFB9D8E8);
+      drawCompassDirection(graphics, "W", centerX + Math.round(14 * cos), centerY - Math.round(14 * sin), 0xFFB9D8E8);
+
+      BlockPos blockPos = BlockPos.containing(player.getX(), player.getY(), player.getZ());
+      String coordinates = blockPos.getX() + " " + blockPos.getY() + " " + blockPos.getZ();
+      graphics.centeredText(this.getFont(), coordinates, centerX, centerY + 21, 0xFFFFFFFF);
+   }
+
+   private void drawCompassDirection(final GuiGraphicsExtractor graphics, final String direction, final int x, final int y, final int color) {
+      graphics.centeredText(this.getFont(), direction, x, y - 4, color);
+   }
+
+   private void extractFigEquipmentHud(final GuiGraphicsExtractor graphics) {
+      if (!this.minecraft.options.figClientEquipmentHud().get() || this.minecraft.player == null || this.minecraft.gui.screen() != null) {
+         return;
+      }
+
+      int centerX = graphics.guiWidth() / 2 + this.minecraft.options.figClientEquipmentHudX().get();
+      int top = graphics.guiHeight() - 78 + this.minecraft.options.figClientEquipmentHudY().get();
+      int slots = 5;
+      int left = centerX - slots * 10;
+      graphics.fill(left - 3, top - 3, left + slots * 20 + 3, top + 23, 0xB0204560);
+      net.minecraft.world.entity.EquipmentSlot[] equipmentSlots = {
+         net.minecraft.world.entity.EquipmentSlot.HEAD,
+         net.minecraft.world.entity.EquipmentSlot.CHEST,
+         net.minecraft.world.entity.EquipmentSlot.LEGS,
+         net.minecraft.world.entity.EquipmentSlot.FEET
+      };
+      for (int i = 0; i < equipmentSlots.length; i++) {
+         this.renderFigEquipmentSlot(graphics, left + i * 20, top, this.minecraft.player.getItemBySlot(equipmentSlots[i]));
+      }
+      this.renderFigEquipmentSlot(graphics, left + 80, top, this.minecraft.player.getOffhandItem());
+   }
+
+   private void renderFigEquipmentSlot(final GuiGraphicsExtractor graphics, final int x, final int y, final ItemStack stack) {
+      graphics.fill(x, y, x + 20, y + 20, 0xA8102234);
+      if (!stack.isEmpty()) {
+         graphics.item(stack, x + 2, y + 2);
+         graphics.itemDecorations(this.getFont(), stack, x + 2, y + 2);
+         if (stack.isDamageableItem()) {
+            int remaining = stack.getMaxDamage() - stack.getDamageValue();
+            int color = remaining <= stack.getMaxDamage() / 5 ? 0xFFFF6262 : 0xFF7CD8F3;
+            graphics.fill(x + 3, y + 18, x + 17, y + 19, 0xFF202830);
+            graphics.fill(x + 3, y + 18, x + 3 + Math.max(1, remaining * 14 / stack.getMaxDamage()), y + 19, color);
+         }
+      }
+   }
+
+   private void extractFigInventoryAlerts(final GuiGraphicsExtractor graphics) {
+      if (!this.minecraft.options.figClientInventoryAlerts().get() || this.minecraft.player == null || this.minecraft.gui.screen() != null) {
+         return;
+      }
+
+      ItemStack hand = this.minecraft.player.getMainHandItem();
+      boolean lowDurability = hand.isDamageableItem()
+         && hand.getMaxDamage() - hand.getDamageValue() <= Math.max(1, hand.getMaxDamage() / 10);
+      boolean inventoryFull = true;
+      for (int slot = 0; slot < this.minecraft.player.getInventory().getContainerSize(); slot++) {
+         if (this.minecraft.player.getInventory().getItem(slot).isEmpty()) {
+            inventoryFull = false;
+            break;
+         }
+      }
+
+      if (lowDurability) {
+         graphics.centeredText(this.getFont(), "LOW DURABILITY", graphics.guiWidth() / 2, graphics.guiHeight() - 94, 0xFFFF6262);
+      } else if (inventoryFull) {
+         graphics.centeredText(this.getFont(), "INVENTORY FULL", graphics.guiWidth() / 2, graphics.guiHeight() - 94, 0xFF7CD8F3);
       }
    }
 
@@ -566,23 +662,24 @@ public class Hud {
       if (player != null) {
          ItemStack offhand = player.getOffhandItem();
          HumanoidArm offhandArm = player.getMainArm().getOpposite();
-         int screenCenter = graphics.guiWidth() / 2;
+         int screenCenter = graphics.guiWidth() / 2 + this.minecraft.options.figClientHotbarX().get();
+         int hotbarTop = graphics.guiHeight() - 22 + this.minecraft.options.figClientHotbarY().get();
          int hotbarWidth = 182;
          int halfHotbar = 91;
-         graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SPRITE, screenCenter - 91, graphics.guiHeight() - 22, 182, 22);
+         graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SPRITE, screenCenter - halfHotbar, hotbarTop, hotbarWidth, 22);
          graphics.blitSprite(
             RenderPipelines.GUI_TEXTURED,
             HOTBAR_SELECTION_SPRITE,
             screenCenter - 91 - 1 + player.getInventory().getSelectedSlot() * 20,
-            graphics.guiHeight() - 22 - 1,
+            hotbarTop - 1,
             24,
             23
          );
          if (!offhand.isEmpty()) {
             if (offhandArm == HumanoidArm.LEFT) {
-               graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_OFFHAND_LEFT_SPRITE, screenCenter - 91 - 29, graphics.guiHeight() - 23, 29, 24);
+               graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_OFFHAND_LEFT_SPRITE, screenCenter - 91 - 29, hotbarTop - 1, 29, 24);
             } else {
-               graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_OFFHAND_RIGHT_SPRITE, screenCenter + 91, graphics.guiHeight() - 23, 29, 24);
+               graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_OFFHAND_RIGHT_SPRITE, screenCenter + 91, hotbarTop - 1, 29, 24);
             }
          }
 
@@ -590,12 +687,12 @@ public class Hud {
 
          for (int i = 0; i < 9; i++) {
             int x = screenCenter - 90 + i * 20 + 2;
-            int y = graphics.guiHeight() - 16 - 3;
+            int y = hotbarTop + 3;
             this.extractSlot(graphics, x, y, deltaTracker, player, player.getInventory().getItem(i), seed++);
          }
 
          if (!offhand.isEmpty()) {
-            int y = graphics.guiHeight() - 16 - 3;
+            int y = hotbarTop + 3;
             if (offhandArm == HumanoidArm.LEFT) {
                this.extractSlot(graphics, screenCenter - 91 - 26, y, deltaTracker, player, offhand, seed++);
             } else {
@@ -606,7 +703,7 @@ public class Hud {
          if (this.minecraft.options.attackIndicator().get() == AttackIndicatorStatus.HOTBAR) {
             float attackStrengthScale = this.minecraft.player.getAttackStrengthScale(0.0F);
             if (attackStrengthScale < 1.0F) {
-               int y = graphics.guiHeight() - 20;
+               int y = hotbarTop + 2;
                int x = screenCenter + 91 + 6;
                if (offhandArm == HumanoidArm.RIGHT) {
                   x = screenCenter - 91 - 22;
@@ -988,6 +1085,17 @@ public class Hud {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, half, xo, yo, 9, 9);
          }
       }
+
+      if (Minecraft.getInstance().options.figClientFoodInfo().get()) {
+         int saturation = (int)Math.ceil(foodData.getSaturationLevel());
+         for (int i = 0; i < 10; i++) {
+            int iconSaturation = Math.min(2, saturation - i * 2);
+            if (iconSaturation > 0) {
+               int xo = xRight - i * 8 - 9;
+               graphics.fill(xo, yLineBase - 3, xo + (iconSaturation == 2 ? 9 : 4), yLineBase - 1, 0xFFFFD45A);
+            }
+         }
+      }
    }
 
    private void extractVehicleHealth(final GuiGraphicsExtractor graphics) {
@@ -1330,7 +1438,10 @@ public class Hud {
    }
 
    private Hud.ContextualInfo nextContextualInfoState() {
-      boolean canShowLocatorInfo = this.minecraft.player.connection.getWaypointManager().hasWaypoints();
+      boolean canShowDeathWaypoint = this.minecraft.player.getLastDeathLocation()
+         .filter(deathLocation -> deathLocation.dimension().equals(this.minecraft.player.level().dimension()))
+         .isPresent();
+      boolean canShowLocatorInfo = this.minecraft.player.connection.getWaypointManager().hasWaypoints() || canShowDeathWaypoint;
       boolean canShowVehicleJumpInfo = this.minecraft.player.jumpableVehicle() != null;
       boolean canShowExperienceInfo = this.minecraft.gameMode.hasExperience();
       if (canShowLocatorInfo) {

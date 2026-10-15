@@ -2,12 +2,14 @@ package net.minecraft.client.gui.screens.inventory;
 
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.BundleMouseActions;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.ItemSlotMouseAction;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.input.KeyEvent;
@@ -19,8 +21,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.Nullable;
 
@@ -53,6 +59,16 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
    private int quickCraftingRemainder;
    private boolean doubleclick;
    private ItemStack lastQuickMoved = ItemStack.EMPTY;
+   private List<QueuedContainerInput> queuedContainerInputs = List.of();
+   private int queuedContainerInputIndex;
+   private int queuedContainerStateId;
+   private int observedContainerStateId;
+   private int stableContainerStateTicks;
+   private int queuedContainerWaitTicks;
+
+   private record QueuedContainerInput(int slotId, ContainerInput input, ItemStack expectedSlot,
+                                      ItemStack expectedCarried) {
+   }
 
    public AbstractContainerScreen(final T menu, final Inventory inventory, final Component title) {
       this(menu, inventory, title, 176, 166);
@@ -74,10 +90,187 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
 
    @Override
    protected void init() {
+      this.cancelQueuedContainerInputs();
       this.leftPos = (this.width - this.imageWidth) / 2;
       this.topPos = (this.height - this.imageHeight) / 2;
       this.itemSlotMouseActions.clear();
       this.addItemSlotMouseAction(new BundleMouseActions(this.minecraft));
+      if (this.menu instanceof InventoryMenu || this.menu instanceof ChestMenu || this.menu instanceof ShulkerBoxMenu) {
+         if (this.minecraft.options.figClientInventorySort().get()) {
+            this.addRenderableWidget(
+               Button.builder(Component.literal("Sort"), button -> this.sortStorageItems())
+                  .bounds(this.leftPos + this.imageWidth - 54, this.topPos - 24, 50, 20)
+                  .build()
+            );
+         }
+      }
+   }
+
+   private void sortStorageItems() {
+      if (this.minecraft.player == null || !this.menu.getCarried().isEmpty()) {
+         return;
+      }
+
+      List<Slot> storageSlots = new ArrayList<>();
+      if (this.menu instanceof InventoryMenu) {
+         storageSlots.addAll(this.menu.slots.subList(9, 45));
+      } else {
+         for (Slot slot : this.menu.slots) {
+            if (slot.container == this.minecraft.player.getInventory()) {
+               break;
+            }
+            storageSlots.add(slot);
+         }
+      }
+      List<ItemStack> simulatedSlots = new ArrayList<>(this.menu.slots.size());
+      for (Slot slot : this.menu.slots) {
+         simulatedSlots.add(slot.getItem().copy());
+      }
+      ItemStack[] simulatedCarried = {this.menu.getCarried().copy()};
+      List<QueuedContainerInput> actions = new ArrayList<>();
+
+      for (int destinationIndex = 0; destinationIndex < storageSlots.size(); destinationIndex++) {
+         Slot destination = storageSlots.get(destinationIndex);
+         ItemStack destinationStack = simulatedSlots.get(destination.index);
+         if (destinationStack.isEmpty() || !destinationStack.isStackable()) {
+            continue;
+         }
+         for (int sourceIndex = destinationIndex + 1; sourceIndex < storageSlots.size(); sourceIndex++) {
+            Slot source = storageSlots.get(sourceIndex);
+            ItemStack sourceStack = simulatedSlots.get(source.index);
+            if (sourceStack.isEmpty() || !source.mayPickup(this.minecraft.player)
+               || !destination.mayPlace(sourceStack)
+               || !ItemStack.isSameItemSameComponents(destinationStack, sourceStack)) {
+               continue;
+            }
+            if (destinationStack.getCount() >= destination.getMaxStackSize(destinationStack)) {
+               break;
+            }
+
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, source);
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, destination);
+            if (!simulatedCarried[0].isEmpty()) {
+               this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, source);
+            }
+            destinationStack = simulatedSlots.get(destination.index);
+         }
+      }
+
+      List<ItemStack> sortedItems = storageSlots.stream()
+         .map(slot -> simulatedSlots.get(slot.index).copy())
+         .sorted(
+            Comparator.<ItemStack>comparingInt(item -> item.isEmpty() ? 1 : 0)
+               .thenComparing(item -> item.isEmpty() ? "" : item.getHoverName().getString(), String.CASE_INSENSITIVE_ORDER)
+               .thenComparing(Comparator.comparingInt(ItemStack::getCount).reversed())
+         )
+         .toList();
+
+      for (int targetIndex = 0; targetIndex < storageSlots.size(); targetIndex++) {
+         Slot target = storageSlots.get(targetIndex);
+         ItemStack wanted = sortedItems.get(targetIndex);
+         ItemStack targetStack = simulatedSlots.get(target.index);
+         if (ItemStack.matches(targetStack, wanted)
+            || !targetStack.isEmpty() && ItemStack.isSameItemSameComponents(targetStack, wanted)) {
+            continue;
+         }
+
+         int sourceIndex = targetIndex + 1;
+         while (sourceIndex < storageSlots.size()
+            && !ItemStack.matches(simulatedSlots.get(storageSlots.get(sourceIndex).index), wanted)) {
+            sourceIndex++;
+         }
+         if (sourceIndex >= storageSlots.size()) {
+            continue;
+         }
+
+         Slot source = storageSlots.get(sourceIndex);
+         ItemStack sourceStack = simulatedSlots.get(source.index);
+         if (!source.mayPickup(this.minecraft.player) || !target.mayPlace(sourceStack)) {
+            continue;
+         }
+
+         if (targetStack.isEmpty()) {
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, source);
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, target);
+         } else if (target.mayPickup(this.minecraft.player)
+            && source.mayPlace(targetStack)) {
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, target);
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, source);
+            this.addPlannedPickup(actions, simulatedSlots, simulatedCarried, target);
+         }
+      }
+
+      this.queueContainerInputs(actions);
+   }
+
+   private void addPlannedPickup(final List<QueuedContainerInput> actions, final List<ItemStack> simulatedSlots,
+                                 final ItemStack[] simulatedCarried, final Slot slot) {
+      int slotId = slot.index;
+      ItemStack current = simulatedSlots.get(slotId);
+      ItemStack carried = simulatedCarried[0];
+      actions.add(new QueuedContainerInput(slotId, ContainerInput.PICKUP, current.copy(), carried.copy()));
+
+      if (carried.isEmpty()) {
+         if (!current.isEmpty() && slot.mayPickup(this.minecraft.player)) {
+            simulatedSlots.set(slotId, ItemStack.EMPTY);
+            simulatedCarried[0] = current.copy();
+         }
+      } else if (current.isEmpty()) {
+         if (slot.mayPlace(carried)) {
+            simulatedSlots.set(slotId, carried.copy());
+            simulatedCarried[0] = ItemStack.EMPTY;
+         }
+      } else if (ItemStack.isSameItemSameComponents(current, carried) && slot.mayPlace(carried)) {
+         int moved = Math.min(carried.getCount(), slot.getMaxStackSize(current) - current.getCount());
+         if (moved > 0) {
+            ItemStack destination = current.copy();
+            destination.grow(moved);
+            ItemStack remainder = carried.copy();
+            remainder.shrink(moved);
+            simulatedSlots.set(slotId, destination);
+            simulatedCarried[0] = remainder;
+         }
+      } else if (slot.mayPickup(this.minecraft.player) && slot.mayPlace(carried)) {
+         simulatedSlots.set(slotId, carried.copy());
+         simulatedCarried[0] = current.copy();
+      }
+   }
+
+   private void queueContainerInputs(final List<QueuedContainerInput> actions) {
+      if (actions.isEmpty() || !this.queuedContainerInputs.isEmpty()) {
+         return;
+      }
+      this.queuedContainerInputs = List.copyOf(actions);
+      this.queuedContainerInputIndex = 0;
+      this.sendNextQueuedContainerInput();
+   }
+
+   private void sendNextQueuedContainerInput() {
+      while (this.queuedContainerInputIndex < this.queuedContainerInputs.size()) {
+         QueuedContainerInput action = this.queuedContainerInputs.get(this.queuedContainerInputIndex);
+         Slot slot = this.menu.getSlot(action.slotId());
+         if (!ItemStack.matches(slot.getItem(), action.expectedSlot())
+            || !ItemStack.matches(this.menu.getCarried(), action.expectedCarried())) {
+            this.cancelQueuedContainerInputs();
+            return;
+         }
+         this.queuedContainerStateId = this.menu.getStateId();
+         this.observedContainerStateId = this.queuedContainerStateId;
+         this.stableContainerStateTicks = 0;
+         this.queuedContainerWaitTicks = 0;
+         this.minecraft.gameMode.handleContainerInput(
+            this.menu.containerId, action.slotId(), 0, action.input(), this.minecraft.player
+         );
+         return;
+      }
+      this.cancelQueuedContainerInputs();
+   }
+
+   private void cancelQueuedContainerInputs() {
+      this.queuedContainerInputs = List.of();
+      this.queuedContainerInputIndex = 0;
+      this.stableContainerStateTicks = 0;
+      this.queuedContainerWaitTicks = 0;
    }
 
    protected void addItemSlotMouseAction(final ItemSlotMouseAction itemSlotMouseAction) {
@@ -166,8 +359,20 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
       if (this.hoveredSlot != null && this.hoveredSlot.hasItem()) {
          ItemStack item = this.hoveredSlot.getItem();
          if (this.menu.getCarried().isEmpty() || this.showTooltipWithItemInHand(item)) {
+            List<Component> tooltipLines = new ArrayList<>(this.getTooltipFromContainerItem(item));
+            FoodProperties food = item.get(DataComponents.FOOD);
+            if (food != null && this.minecraft.options.figClientFoodInfo().get() && this.minecraft.player != null) {
+               int currentFood = this.minecraft.player.getFoodData().getFoodLevel();
+               int predictedFood = Math.min(20, currentFood + food.nutrition());
+               float predictedSaturation = Math.min(predictedFood,
+                  this.minecraft.player.getFoodData().getSaturationLevel() + food.saturation());
+               tooltipLines.add(Component.literal("Food +" + food.nutrition() + "  Saturation +"
+                  + (Math.round(food.saturation() * 10.0F) / 10.0F)).withStyle(ChatFormatting.YELLOW));
+               tooltipLines.add(Component.literal("After eating: " + predictedFood + " food, "
+                  + (Math.round(predictedSaturation * 10.0F) / 10.0F) + " saturation").withStyle(ChatFormatting.GOLD));
+            }
             graphics.setTooltipForNextFrame(
-               this.font, this.getTooltipFromContainerItem(item), item.getTooltipImage(), mouseX, mouseY, item.get(DataComponents.TOOLTIP_STYLE)
+               this.font, tooltipLines, item.getTooltipImage(), mouseX, mouseY, item.get(DataComponents.TOOLTIP_STYLE)
             );
          }
       }
@@ -243,6 +448,7 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
 
          graphics.itemDecorations(this.font, itemStack, x, y, itemCount);
       }
+
    }
 
    private void recalculateQuickCraftRemaining() {
@@ -458,6 +664,7 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
    }
 
    protected void slotClicked(final Slot slot, int slotId, final int buttonNum, final ContainerInput containerInput) {
+      this.cancelQueuedContainerInputs();
       if (slot != null) {
          slotId = slot.index;
       }
@@ -549,6 +756,23 @@ public abstract class AbstractContainerScreen<T extends AbstractContainerMenu> e
    }
 
    protected void containerTick() {
+      if (this.queuedContainerInputs.isEmpty()) {
+         return;
+      }
+
+      int stateId = this.menu.getStateId();
+      if (stateId != this.observedContainerStateId) {
+         this.observedContainerStateId = stateId;
+         this.stableContainerStateTicks = 0;
+      } else {
+         this.stableContainerStateTicks++;
+      }
+      if (++this.queuedContainerWaitTicks > 100) {
+         this.cancelQueuedContainerInputs();
+      } else if (stateId != this.queuedContainerStateId && this.stableContainerStateTicks >= 2) {
+         this.queuedContainerInputIndex++;
+         this.sendNextQueuedContainerInput();
+      }
    }
 
    private boolean shouldAddSlotToQuickCraft(final Slot slot, final ItemStack carried) {

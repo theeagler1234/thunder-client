@@ -11,7 +11,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CommonButtons;
 import net.minecraft.client.gui.components.LogoRenderer;
 import net.minecraft.client.gui.components.PlainTextButton;
-import net.minecraft.client.gui.components.SplashRenderer;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -41,10 +40,9 @@ import org.slf4j.Logger;
 
 public class TitleScreen extends Screen {
    private static final Logger LOGGER = LogUtils.getLogger();
-   private static final Component TITLE = Component.translatable("narrator.screen.title");
+   private static final Component TITLE = Component.literal("Fig Client");
    private static final Component COPYRIGHT_TEXT = Component.translatable("title.credits");
    private static final String DEMO_LEVEL_ID = "Demo_World";
-   private @Nullable SplashRenderer splash;
    private boolean fading;
    private long fadeInStart;
    private final LogoRenderer logoRenderer;
@@ -82,23 +80,21 @@ public class TitleScreen extends Screen {
 
    @Override
    protected void init() {
-      if (this.splash == null) {
-         this.splash = this.minecraft.gui.splashManager().getSplash();
-      }
-
       int copyrightWidth = this.font.width(COPYRIGHT_TEXT);
       int copyrightX = this.width - copyrightWidth - 2;
       int spacing = 24;
-      int topPos = this.height / 4 + 48;
+      int menuButtonX = Math.max(24, Math.min(64, this.width / 16));
+      int topPos = this.height / 2 - 42;
       if (this.minecraft.isDemo()) {
-         topPos = this.createDemoMenuOptions(topPos, 24);
+         topPos = this.createDemoMenuOptions(topPos, 24, menuButtonX);
       } else {
-         topPos = this.createNormalMenuOptions(topPos, 24);
+         topPos = this.createNormalMenuOptions(topPos, 24, menuButtonX);
       }
 
       int numberOfButtons = this.minecraft.isDemo() ? 2 : 3;
       int currentButton = 0;
-      topPos += 24;
+      int utilityRowWidth = numberOfButtons * 20 + (numberOfButtons - 1) * 4;
+      int utilityRowLeft = this.width - utilityRowWidth - 16;
       if (!this.minecraft.isDemo()) {
          SpriteIconButton profile = this.addRenderableWidget(
             CommonButtons.profile(
@@ -107,33 +103,41 @@ public class TitleScreen extends Screen {
                true
             )
          );
-         profile.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20), topPos);
+         profile.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20, utilityRowLeft, utilityRowWidth), 18);
       }
       SpriteIconButton language = this.addRenderableWidget(
          CommonButtons.language(
             20, var1x -> this.minecraft.gui.setScreen(new LanguageSelectScreen(this, this.minecraft.options, this.minecraft.getLanguageManager())), true
          )
       );
-      language.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20), topPos);
+      language.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20, utilityRowLeft, utilityRowWidth), 18);
       SpriteIconButton accessibility = this.addRenderableWidget(
          CommonButtons.accessibility(20, var1x -> this.minecraft.gui.setScreen(new AccessibilityOptionsScreen(this, this.minecraft.options)), true)
       );
-      accessibility.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20), topPos);
-      Button.Builder var10001 = Button.builder(
-         Component.translatable("menu.options"), var1x -> this.minecraft.gui.setScreen(new OptionsScreen(this, this.minecraft.options, false))
+      accessibility.setPosition(this.getHorizontalPosition(++currentButton, numberOfButtons, 20, utilityRowLeft, utilityRowWidth), 18);
+      topPos += 34;
+      this.addRenderableWidget(
+         new PlainTextButton(menuButtonX, topPos, 220, 24, Component.literal("Fig Mods"), var1x -> this.minecraft.gui.setScreen(
+            new net.minecraft.client.gui.screens.options.FigModulesScreen(this, this.minecraft.options)
+         ), this.font)
       );
-      int var10002 = this.width / 2 - 100;
-      topPos += 24;
-      this.addRenderableWidget(var10001.bounds(var10002, topPos, 98, 20).build());
+      topPos += 26;
+      this.addRenderableWidget(
+         new PlainTextButton(menuButtonX, topPos, 220, 24, Component.literal("Relays"), var1x -> this.minecraft.gui.setScreen(
+            new net.lax1dude.eaglercraft.v1_8.sp.gui.RelaySettingsScreen(this)
+         ), this.font)
+      );
+      topPos += 26;
       boolean eaglerHosted = net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive();
       this.addRenderableWidget(
-         Button.builder(eaglerHosted ? Component.translatableWithFallback("menu.credits", "Credits") : Component.translatable("menu.quit"), var1x -> {
+         new PlainTextButton(menuButtonX, topPos, 220, 24,
+            eaglerHosted ? Component.translatableWithFallback("menu.credits", "Credits") : Component.translatable("menu.quit"), var1x -> {
             if (eaglerHosted) {
                this.minecraft.gui.setScreen(new EaglerCreditsScreen(this));
             } else {
                this.minecraft.stop();
             }
-         }).bounds(this.width / 2 + 2, topPos, 98, 20).build()
+         }, this.font)
       );
       this.addRenderableWidget(
          new PlainTextButton(
@@ -195,14 +199,15 @@ public class TitleScreen extends Screen {
       return true;
    }
 
-   private int getHorizontalPosition(final int currentButton, final int numberOfButtons, final int buttonWidth) {
+   private int getHorizontalPosition(final int currentButton, final int numberOfButtons, final int buttonWidth,
+                                     final int parentLeft, final int parentWidth) {
       int totalWidth = numberOfButtons * buttonWidth + (numberOfButtons - 1) * 4;
-      return this.width / 2 - totalWidth / 2 + (currentButton - 1) * (buttonWidth + 4);
+      return parentLeft + (parentWidth - totalWidth) / 2 + (currentButton - 1) * (buttonWidth + 4);
    }
 
-   private int createNormalMenuOptions(int topPos, final int spacing) {
-      Button singleplayerButton = this.addRenderableWidget(
-	         Button.builder(Component.translatable("menu.singleplayer"), var1 -> {
+   private int createNormalMenuOptions(int topPos, final int spacing, final int menuButtonX) {
+      PlainTextButton singleplayerButton = this.addRenderableWidget(
+         new PlainTextButton(menuButtonX, topPos, 220, 24, Component.translatable("menu.singleplayer"), var1 -> {
 	            if (net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive()) {
 	               net.lax1dude.eaglercraft.v1_8.mesh.MeshWorkerRuntime.prewarm();
 	               net.lax1dude.eaglercraft.v1_8.sp.SingleplayerServerController26.prewarmServerWorker();
@@ -217,15 +222,12 @@ public class TitleScreen extends Screen {
 	            } else {
 	               this.minecraft.gui.setScreen(new SelectWorldScreen(this));
 	            }
-	         })
-            .bounds(this.width / 2 - 100, topPos, 200, 20)
-            .build()
+            }, this.font)
       );
       if (SharedConstants.IS_RUNNING_IN_IDE) {
          this.addRenderableWidget(
-            Button.builder(Component.literal("TW"), var1 -> CreateWorldScreen.testWorld(this.minecraft, () -> this.minecraft.gui.setScreen(this)))
-               .bounds(singleplayerButton.getX() + singleplayerButton.getWidth() + 2, topPos, 20, 20)
-               .build()
+            new PlainTextButton(singleplayerButton.getX() + singleplayerButton.getWidth() + 2, topPos, 20, 20,
+               Component.literal("TW"), var1 -> CreateWorldScreen.testWorld(this.minecraft, () -> this.minecraft.gui.setScreen(this)), this.font)
          );
       }
 
@@ -233,13 +235,16 @@ public class TitleScreen extends Screen {
       boolean multiplayerAllowed = multiplayerDisabledReason == null;
       Tooltip tooltip = multiplayerDisabledReason != null ? Tooltip.create(multiplayerDisabledReason) : null;
       int var7;
-      this.addRenderableWidget(Button.builder(Component.translatable("menu.multiplayer"), button -> {
+      PlainTextButton multiplayerButton = this.addRenderableWidget(new PlainTextButton(menuButtonX, var7 = topPos + spacing, 220, 24,
+         Component.translatable("menu.multiplayer"), button -> {
          if (net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive()) {
             net.lax1dude.eaglercraft.v1_8.sp.SingleplayerServerController26.prepareForRemoteMultiplayer();
          }
          Screen screen = this.minecraft.options.skipMultiplayerWarning ? new JoinMultiplayerScreen(this) : new SafetyScreen(this);
          this.minecraft.gui.setScreen(screen);
-      }).bounds(this.width / 2 - 100, var7 = topPos + spacing, 200, 20).tooltip(tooltip).build()).active = multiplayerAllowed;
+      }, this.font));
+      multiplayerButton.setTooltip(tooltip);
+      multiplayerButton.active = multiplayerAllowed;
       return var7;
    }
 
@@ -260,11 +265,11 @@ public class TitleScreen extends Screen {
       }
    }
 
-   private int createDemoMenuOptions(int topPos, final int spacing) {
+   private int createDemoMenuOptions(int topPos, final int spacing, final int menuButtonX) {
       boolean demoWorldPresent = this.checkDemoWorldPresence();
       this.addRenderableWidget(
-         Button.builder(
-               Component.translatable("menu.playdemo"),
+         new PlainTextButton(menuButtonX + 10, topPos, 200, 20,
+            Component.translatable("menu.playdemo"),
                button -> {
                   if (demoWorldPresent) {
                      this.minecraft.createWorldOpenFlows().openWorld("Demo_World", () -> this.minecraft.gui.setScreen(this));
@@ -275,16 +280,13 @@ public class TitleScreen extends Screen {
                            "Demo_World", MinecraftServer.DEMO_SETTINGS, WorldOptions.DEMO_OPTIONS, WorldPresets::createNormalWorldDimensions, this
                         );
                   }
-               }
-            )
-            .bounds(this.width / 2 - 100, topPos, 200, 20)
-            .build()
+               }, this.font)
       );
       int var5;
-      Button resetDemoButton = this.addRenderableWidget(
-         Button.builder(
-               Component.translatable("menu.resetdemo"),
-               button -> {
+      PlainTextButton resetDemoButton = this.addRenderableWidget(
+         new PlainTextButton(menuButtonX + 10, var5 = topPos + spacing, 200, 20,
+            Component.translatable("menu.resetdemo"),
+            button -> {
                   LevelStorageSource levelSource = this.minecraft.getLevelSource();
 
                   try (LevelStorageSource.LevelStorageAccess levelAccess = levelSource.createAccess("Demo_World")) {
@@ -305,10 +307,7 @@ public class TitleScreen extends Screen {
                      SystemToast.onWorldAccessFailure(this.minecraft, "Demo_World");
                      LOGGER.warn("Failed to access demo world", e);
                   }
-               }
-            )
-            .bounds(this.width / 2 - 100, var5 = topPos + spacing, 200, 20)
-            .build()
+            }, this.font)
       );
       resetDemoButton.active = demoWorldPresent;
       return var5;
@@ -343,13 +342,17 @@ public class TitleScreen extends Screen {
          this.fadeWidgets(widgetFade);
       }
 
-      this.extractPanorama(graphics, a);
+      this.minecraft.gameRenderer.panorama().extractRenderState(graphics, this.width, this.height);
+      graphics.fillGradient(0, this.height / 3, this.width, this.height, 0x00000000, 0xB0183442);
+      int brandX = Math.max(24, Math.min(64, this.width / 16));
+      int brandY = Math.max(30, this.height / 4 - 30);
+      graphics.pose().pushMatrix();
+      graphics.pose().translate(brandX, brandY);
+      graphics.pose().scale(2.6F, 2.6F);
+      graphics.text(this.font, Component.literal("FIG CLIENT").withStyle(net.minecraft.ChatFormatting.AQUA, net.minecraft.ChatFormatting.BOLD),
+         0, 0, ARGB.white(widgetFade));
+      graphics.pose().popMatrix();
       super.extractRenderState(graphics, mouseX, mouseY, a);
-      this.logoRenderer.extractRenderState(graphics, this.width, this.logoRenderer.keepLogoThroughFade() ? 1.0F : widgetFade);
-      if (this.splash != null && !this.minecraft.options.hideSplashTexts().get()) {
-         this.splash.extractRenderState(graphics, this.width, this.font, widgetFade);
-      }
-
       String versionString = "Minecraft " + SharedConstants.getCurrentVersion().name();
       if (this.minecraft.isDemo()) {
          versionString = versionString + " Demo";
@@ -360,7 +363,9 @@ public class TitleScreen extends Screen {
       }
 
       if (net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.isActive()) {
-         // Eagler branding (kept minimal per Matej)
+         // Minimal client branding: keep the Eagler credit line, but make the
+         // running client visibly identify itself as Fig Client on the title screen.
+         graphics.text(this.font, Component.literal("Fig Client"), 2, this.height - 30, ARGB.white(widgetFade));
          graphics.text(this.font, Component.translatableWithFallback("eagler.menu.brand", "Eaglercraft %s",
                   net.lax1dude.eaglercraft.v1_8.EaglercraftVersion.projectForkVersion),
             2, this.height - 20, ARGB.white(widgetFade));
@@ -368,12 +373,19 @@ public class TitleScreen extends Screen {
                   net.lax1dude.eaglercraft.v1_8.EaglercraftVersion.projectForkVendor),
             2, this.height - 10, ARGB.white(widgetFade));
       } else {
+         graphics.text(this.font, Component.literal("Fig Client"), 2, this.height - 20, ARGB.white(widgetFade));
          graphics.text(this.font, versionString, 2, this.height - 10, ARGB.white(widgetFade));
       }
    }
 
    @Override
    public void extractBackground(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a) {
+   }
+
+   @Override
+   protected void extractPanorama(final GuiGraphicsExtractor graphics, final float a) {
+      super.extractPanorama(graphics, a);
+      graphics.fill(0, 0, this.width, this.height, 0x302B8FC0);
    }
 
    private void confirmDemo(final boolean result) {

@@ -164,6 +164,7 @@ function verifyReusableArtifact(file, flag, target, label) {
 function prepareBaseAssets() {
   run("./gradlew", [
     ":target_lwjgl_desktop:buildAssetsEPK",
+    ":target_lwjgl_desktop:buildSoundsEPK",
     "--console=plain",
     "--no-daemon",
     "--max-workers=1",
@@ -171,11 +172,16 @@ function prepareBaseAssets() {
     "-Dorg.gradle.jvmargs=-Xmx4096m -Xss4m -XX:MaxMetaspaceSize=768m -XX:+UseG1GC"
   ]);
   const packed = path.join(repo, "target_lwjgl_desktop", "build", "epk", "assets.epk");
+  const packedSounds = path.join(repo, "target_lwjgl_desktop", "build", "epk", "sounds.epk");
   const hosted = path.join(repo, "target_teavm", "build", "web", "assets.epk");
+  const hostedSounds = path.join(repo, "target_teavm", "build", "web", "sounds.epk");
   if (!fs.existsSync(packed)) fail("buildAssetsEPK completed without producing assets.epk");
+  if (!fs.existsSync(packedSounds)) fail("buildSoundsEPK completed without producing sounds.epk");
   fs.mkdirSync(path.dirname(hosted), { recursive: true });
   fs.copyFileSync(packed, hosted);
+  fs.copyFileSync(packedSounds, hostedSounds);
   console.log(`[single-html] Installed source-matched assets.epk (${fs.statSync(hosted).size.toLocaleString()} bytes)`);
+  console.log(`[single-html] Installed source-matched sounds.epk (${fs.statSync(hostedSounds).size.toLocaleString()} bytes)`);
 }
 
 function compressedWasm(name, bytes) {
@@ -342,7 +348,8 @@ const meshWasm = read("mesh-worker.wasm");
 const serverWasm = read("server-worker.wasm");
 const assets = read("assets.epk");
 const sounds = read("sounds.epk");
-if (!fs.existsSync(musicSource)) {
+const hasMusicSource = fs.existsSync(musicSource);
+if (withMusic && !hasMusicSource) {
   fail(`missing music EPK at ${musicSource}; build the regular TeaVM web assets first`);
 }
 const music = withMusic ? fs.readFileSync(musicSource) : null;
@@ -706,7 +713,7 @@ console.log(`  music.epk:       ${(music ? music.length : 0).toLocaleString()} B
 console.log(`  output HTML:     ${outputBytes.toLocaleString()} B (${(outputBytes / 1_000_000).toFixed(2)} MB)`);
 console.log(`[single-html] wrote ${output}`);
 
-if (withoutMusic) {
+if (withoutMusic && hasMusicSource) {
   const musicPack = spawnSync(process.execPath, [
     path.join(repo, "wasm-toolchain", "export-music-resource-pack.js"),
     musicSource,
@@ -714,6 +721,8 @@ if (withoutMusic) {
   ], { cwd: repo, stdio: "inherit" });
   if (musicPack.error) fail(musicPack.error.message);
   if (musicPack.status !== 0) fail(`optional music pack export exited with code ${musicPack.status}`);
+} else if (withoutMusic) {
+  console.log("[single-html] optional music pack omitted because music.epk is unavailable");
 }
 
 if (withoutMusic && outputBytes > target && !diagnosticBuild && !fastPackage) {

@@ -86,6 +86,10 @@ public class StructureTemplate {
       return this.size;
    }
 
+   public List<StructureTemplate.StructureBlockInfo> getBlockInfo() {
+      return this.palettes.isEmpty() ? List.of() : List.copyOf(this.palettes.get(0).blocks());
+   }
+
    public void setAuthor(final String author) {
       this.author = author;
    }

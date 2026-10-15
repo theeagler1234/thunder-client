@@ -42,17 +42,15 @@ public enum GraphicsPreset implements StringRepresentable {
             // browser thread, so it is tuned harder than desktop FAST. Worldgen runs on a
             // SINGLE green thread doing BigInt-emulated long noise math (~37x slower than
             // native), so the server must generate every chunk in the view radius on that one
-            // thread after join — VD 6 (13x13 = 169 chunks) is what left the server ~53s / 1000+
-            // ticks behind with holes in the world. VD 4 (9x9 = 81, ~2x fewer) matches the 1.8
-            // reference default render distance and lets gen keep up; sim 4 keeps mob simulation
-            // reasonable while trimming per-tick chunk ticking. Both are just defaults the user
-            // can raise in Options once the native noise kernel lands.
+            // thread after join. Keep the web defaults at VD 3 (7x7 = 49 chunks) and sim 3 so
+            // low-memory devices have fewer chunks to generate, render, and tick; users can
+            // raise either value in Options if their device has headroom.
             boolean eaglerWeb = net.lax1dude.eaglercraft.v1_8.minecraft.EaglerHosted.webGpuBackendFactory != null;
-            int viewDistance = eaglerWeb ? 4 : 8;
+            int viewDistance = eaglerWeb ? 3 : 8;
             set(screen, minecraft.options.biomeBlendRadius(), eaglerWeb ? 0 : 1);
             set(screen, minecraft.options.renderDistance(), viewDistance);
             set(screen, minecraft.options.prioritizeChunkUpdates(), PrioritizeChunkUpdates.NONE);
-            set(screen, minecraft.options.simulationDistance(), eaglerWeb ? 4 : 6);
+            set(screen, minecraft.options.simulationDistance(), eaglerWeb ? 3 : 6);
             set(screen, minecraft.options.ambientOcclusion(), false);
             set(screen, minecraft.options.cloudStatus(), CloudStatus.FAST);
             set(screen, minecraft.options.particles(), eaglerWeb ? ParticleStatus.MINIMAL : ParticleStatus.DECREASED);

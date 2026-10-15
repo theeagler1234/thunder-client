@@ -221,6 +221,10 @@ public class Camera implements TrackedWaypoint.Camera {
       }
 
       float fov = this.minecraft.options.fov().get().intValue() * Mth.lerp(partialTicks, this.oldFovModifier, this.fovModifier);
+      if (this.minecraft.options.figClientZoom().get() && this.minecraft.options.keyFigZoom.isDown()) {
+         fov *= 0.25F;
+      }
+
       return this.modifyFovBasedOnDeathOrFluid(partialTicks, fov);
    }
 

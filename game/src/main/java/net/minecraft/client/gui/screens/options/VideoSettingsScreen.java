@@ -74,6 +74,8 @@ public class VideoSettingsScreen extends OptionsSubScreen {
          options.fullscreen(),
          options.exclusiveFullscreen(),
          options.gamma(),
+         options.figClientFullbright(),
+         options.figClientChunkSaver(),
          options.preferredGraphicsBackend()
       };
    }

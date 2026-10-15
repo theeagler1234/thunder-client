@@ -229,10 +229,10 @@ public class MeshWorkerCompileTest {
 
 			// ---- build snapshot from the live region ----
 			SectionSnapshot snap = SectionSnapshotBuilder.build(chosenRegion, chosenX, chosenY, chosenZ, ao, cutout,
-					isDebug, false, camX, camY, camZ);
+					false, isDebug, false, camX, camY, camZ);
 
 			// ---- inline compile (the reference) ----
-			SectionCompiler inlineCompiler = new SectionCompiler(ao, cutout, modelSet, fluidSet, blockColors);
+			SectionCompiler inlineCompiler = new SectionCompiler(ao, cutout, false, modelSet, fluidSet, blockColors);
 			SectionBufferBuilderPack pack = new SectionBufferBuilderPack();
 			SectionPos sp = SectionPos.of(chosenX, chosenY, chosenZ);
 			VertexSorting sorting = VertexSorting.byDistance(snap.cameraRelX, snap.cameraRelY, snap.cameraRelZ);

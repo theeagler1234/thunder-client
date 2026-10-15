@@ -89,6 +89,7 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Matrix4fc;
@@ -353,6 +354,7 @@ public class LevelRenderer implements AutoCloseable {
       if (renderOutline) {
          this.submitBlockOutline(poseStack, this.submitNodeStorage, levelRenderState);
       }
+      this.submitFigBlockSearchOutlines(poseStack, submitNodeCollector, levelRenderState);
 
       this.finalizeGizmoCollection();
       this.finalizedGizmos.standardPrimitives().submit(submitNodeCollector, levelRenderState.cameraRenderState, false);
@@ -814,6 +816,41 @@ public class LevelRenderer implements AutoCloseable {
       }
    }
 
+   private void submitFigBlockSearchOutlines(
+      final PoseStack poseStack, final SubmitNodeCollector submitNodeCollector, final LevelRenderState levelRenderState
+   ) {
+      Vec3 cameraPos = levelRenderState.cameraRenderState.pos;
+      for (BlockPos pos : net.minecraft.client.gui.screens.options.FigBlockSearch.matches()) {
+         poseStack.pushPose();
+         poseStack.translate(pos.getX() - cameraPos.x, pos.getY() - cameraPos.y, pos.getZ() - cameraPos.z);
+         submitNodeCollector.submitCustomGeometry(poseStack, RenderTypes.figBlockSearch(), (pose, vertices) -> {
+            int color = 0x704DDFFF;
+            face(vertices, pose, color, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0);
+            face(vertices, pose, color, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1);
+            face(vertices, pose, color, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1);
+            face(vertices, pose, color, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0);
+            face(vertices, pose, color, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1);
+            face(vertices, pose, color, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0);
+         });
+         poseStack.popPose();
+      }
+   }
+
+   private static void face(
+      final com.mojang.blaze3d.vertex.VertexConsumer vertices,
+      final PoseStack.Pose pose,
+      final int color,
+      final float x0, final float y0, final float z0,
+      final float x1, final float y1, final float z1,
+      final float x2, final float y2, final float z2,
+      final float x3, final float y3, final float z3
+   ) {
+      vertices.addVertex(pose, x0, y0, z0).setColor(color);
+      vertices.addVertex(pose, x1, y1, z1).setColor(color);
+      vertices.addVertex(pose, x2, y2, z2).setColor(color);
+      vertices.addVertex(pose, x3, y3, z3).setColor(color);
+   }
+
    private void submitHitOutline(
       final PoseStack poseStack,
       final SubmitNodeCollector submitNodeCollector,
@@ -884,6 +921,7 @@ public class LevelRenderer implements AutoCloseable {
       SectionCompiler sectionCompiler = new SectionCompiler(
          options.ambientOcclusion().get(),
          options.cutoutLeaves().get(),
+         options.figClientXray().get(),
          this.modelManager.getBlockStateModelSet(),
          this.modelManager.getFluidStateModelSet(),
          blockColors

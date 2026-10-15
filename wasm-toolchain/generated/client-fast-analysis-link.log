@@ -1,0 +1,49 @@
+[standalone-teavm] requestedOptimization=FULL effectiveOptimization=SIMPLE dependencyAnalysis=fast strict=true obfuscated=true
+INFO: Running TeaVM
+[standalone-teavm] phase=DEPENDENCY_ANALYSIS workItems=0
+EAGLER_UNSUPPORTED_STRIP java.util.Date.toString (removed @UnsupportedOn)
+[standalone-teavm] progress=8076/0
+[standalone-teavm] phase=COMPILING workItems=1000
+EAGLER_WASMGC_PHANTOM_ROOT java.net.PasswordAuthentication classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.SystemInfo classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.hardware.VirtualMemory classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.hardware.GlobalMemory classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.hardware.CentralProcessor classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.software.os.OSProcess classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.software.os.OperatingSystem classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT oshi.hardware.HardwareAbstractionLayer classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.io.ObjectOutput classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.io.ObjectInput classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.io.ObjectOutputStream classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.nio.file.attribute.UserPrincipalLookupService classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.nio.file.attribute.FileStoreAttributeView classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.nio.file.WatchEvent$Modifier classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.nio.channels.spi.AbstractSelector classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_ROOT java.net.SocketTimeoutException classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_CATCH runtime-instanceof (non-native) for catch type java.net.SocketTimeoutException
+EAGLER_WASMGC_PHANTOM_ROOT java.security.InvalidKeyException classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_CATCH runtime-instanceof (non-native) for catch type java.security.InvalidKeyException
+EAGLER_WASMGC_PHANTOM_ROOT java.nio.channels.ClosedByInterruptException classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_CATCH runtime-instanceof (non-native) for catch type java.nio.channels.ClosedByInterruptException
+EAGLER_WASMGC_PHANTOM_ROOT java.security.SignatureException classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_CATCH runtime-instanceof (non-native) for catch type java.security.SignatureException
+EAGLER_WASMGC_PHANTOM_ROOT java.security.spec.InvalidKeySpecException classReader=false parent=n/a
+EAGLER_WASMGC_PHANTOM_CATCH runtime-instanceof (non-native) for catch type java.security.spec.InvalidKeySpecException
+EAGLER_SPLIT: SPLIT @teavm.initReflection nodes=2070455 stmts=51556 -> 205 sub-functions
+EAGLER_SPLIT: SKIP net.minecraft.world.item.Items::<clinit> nodes=60668 stmts=4 (has 16 locals)
+EAGLER_SPLIT: SKIP net.minecraft.world.level.block.Blocks::<clinit> nodes=106044 stmts=4 (has 19 locals)
+EAGLER_SPLIT: SKIP net.minecraft.sounds.SoundEvents::<clinit> nodes=33844 stmts=4 (has 2 locals)
+EAGLER_SPLIT: SKIP net.minecraft.client.renderer.RenderPipelines::<clinit> nodes=31069 stmts=4 (has 15 locals)
+EAGLER_SPLIT: SKIP net.minecraft.world.entity.EntityTypes::<clinit> nodes=28819 stmts=4 (has 11 locals)
+EAGLER_SPLIT: SKIP net.minecraft.client.animation.definitions.CopperGolemAnimation::<clinit> nodes=27838 stmts=4 (has 15 locals)
+EAGLER_SPLIT: SKIP net.minecraft.client.animation.definitions.SnifferAnimation::<clinit> nodes=20175 stmts=4 (has 16 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrap3_1 nodes=53457 stmts=4 (has 8 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrap3_2 nodes=129345 stmts=4 (has 9 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrap6 nodes=20635 stmts=4 (has 9 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrap8 nodes=46900 stmts=4 (has 10 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrapA nodes=38500 stmts=4 (has 9 locals)
+EAGLER_SPLIT: SKIP net.minecraft.util.datafix.fixes.BlockStateData::bootstrapC nodes=25499 stmts=4 (has 9 locals)
+EAGLER_SPLIT: SPLIT teavm@initializer nodes=1822375 stmts=545349 -> 182 sub-functions
+INFO: Output file successfully built
+INFO: Classes compiled: 36902
+INFO: Methods compiled: 213380

@@ -8,6 +8,7 @@
     "deploy:dev:web": "node wasm-toolchain/build-dev-web.js --reuse-client --reuse-mesh --reuse-server",
     "build:single": "node wasm-toolchain/build-single-html.js",
     "build:release:web:tested": "node wasm-toolchain/build-single-html.js --reuse-client --reuse-mesh --reuse-server",
+    "build:pages": "node wasm-toolchain/build-single-html.js --reuse-client --reuse-mesh --reuse-server --output public/index.html",
     "pack:single": "node wasm-toolchain/build-single-html.js --skip-build",
     "build:single:lean": "node wasm-toolchain/build-single-html.js",
     "pack:single:lean": "node wasm-toolchain/build-single-html.js --skip-build"

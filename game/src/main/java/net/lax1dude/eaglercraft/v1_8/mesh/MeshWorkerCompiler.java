@@ -81,11 +81,12 @@ public final class MeshWorkerCompiler {
 		this.lastJobId = snap.jobId;
 		boolean cutout = (snap.flags & 2) != 0;
 		boolean ao = (snap.flags & 1) != 0;
+		boolean xray = (snap.flags & 16) != 0;
 		// Match the main thread's leaf-face culling mode.
 		net.minecraft.world.level.block.LeavesBlock.setCutoutLeaves(cutout);
 		// Rebuild when rendering options change.
-		if (this.compiler == null || this.compilerAo != ao || this.compilerCutout != cutout) {
-			this.compiler = new SectionCompiler(ao, cutout, this.modelSet, this.fluidModelSet, this.blockColors);
+		if (this.compiler == null || this.compilerAo != ao || this.compilerCutout != cutout || this.compiler.xray() != xray) {
+			this.compiler = new SectionCompiler(ao, cutout, xray, this.modelSet, this.fluidModelSet, this.blockColors);
 			this.compilerAo = ao;
 			this.compilerCutout = cutout;
 		}
