@@ -1,5 +1,7 @@
-tasks:
+tasks
 
-AtroxIV:add a click GUI
+theeagler1234: port lithium to src | due Wednesday 
 
-theeagler1234: port lithium
+atroxIV: assign yourself something to do please | due tommorow
+
+Wesson: please commit the clickGUI (watch a tutorial or something | due monday
