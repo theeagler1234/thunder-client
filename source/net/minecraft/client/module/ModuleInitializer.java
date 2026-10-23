@@ -53,6 +53,7 @@ public class ModuleInitializer {
         // World modules
         manager.registerModules(
             new XRayModule(),
+            new SeedCrackerModule(),
             new CaveFinderModule(),
             new SafeWalkModule(),
             new AutoMLGModule(),
