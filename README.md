@@ -182,7 +182,6 @@ source/net/minecraft/client/
 **Built by:** theeagler1234  
 **Repository:** https://github.com/theeagler1234/thunder-client  
 **Platform:** Eaglercraft 26.2 (TeaVM)  
-**License:** See LICENSE file
 
 ---
 
