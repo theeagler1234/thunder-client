@@ -1,5 +1,5 @@
 | Owner | Task | Due |
 |---|---|---|
-| theeagler1234 | port lithium to src | Wednesday |
+| theeagler1234 | redesign click GUI | tuesday |
 | atroxIV | assign yourself something to do please | today |
-| Wesson | please commit the clickGUI (watch a tutorial or something) | monday |
+| Wesson | Assign yourself something please | monday |
