@@ -94,6 +94,7 @@ import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.client.module.ModuleManager;
 import net.minecraft.client.gui.screens.OutOfMemoryScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.ProgressScreen;
@@ -543,6 +544,7 @@ public class Minecraft extends ReentrantBlockableEventLoop<Runnable> implements 
       this.mouseHandler.setup(this.window);
       this.keyboardHandler = new KeyboardHandler(this);
       this.keyboardHandler.setup(this.window);
+      ModuleInitializer.init();
       this.options.applyGraphicsPreset(this.options.graphicsPreset().get());
       this.resourceManager = new ReloadableResourceManager(PackType.CLIENT_RESOURCES);
       this.resourcePackRepository.reload();
@@ -1293,6 +1295,7 @@ public class Minecraft extends ReentrantBlockableEventLoop<Runnable> implements 
             RenderSystem.executePendingTasks();
             profiler.pop();
             this.gameRenderer.render(this.deltaTracker, advanceGameTime);
+         ModuleManager.getInstance().onRender();
          }
 
          profiler.push("present");
@@ -1766,6 +1769,7 @@ public class Minecraft extends ReentrantBlockableEventLoop<Runnable> implements 
       profiler.push("gui");
       this.textInputManager.tick();
       this.gui.tick();
+      ModuleManager.getInstance().onTick();
       if (this.gui.screen() != null) {
          this.missTime = 10000;
       }
@@ -1852,6 +1856,10 @@ public class Minecraft extends ReentrantBlockableEventLoop<Runnable> implements 
    }
 
    private void handleKeybinds() {
+      while (this.options.keyClickGUI.consumeClick()) {
+         ModuleManager.getInstance().openClickGUI();
+      }
+
       while (this.options.keyTogglePerspective.consumeClick()) {
          CameraType previous = this.options.getCameraType();
          this.options.setCameraType(this.options.getCameraType().cycle());

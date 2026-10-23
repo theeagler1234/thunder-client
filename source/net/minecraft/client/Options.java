@@ -718,6 +718,8 @@ public class Options {
    public final KeyMapping keyDebugReloadResourcePacks = new KeyMapping(
       "key.debug.reloadResourcePacks", InputConstants.Type.KEYSYM, 84, KeyMapping.Category.DEBUG
    );
+   public final KeyMapping keyClickGUI = new KeyMapping("key.clickgui", 299, KeyMapping.Category.MISC);
+   );
    public final KeyMapping keyDebugProfiling = new KeyMapping("key.debug.profiling", InputConstants.Type.KEYSYM, 76, KeyMapping.Category.DEBUG);
    public final KeyMapping keyDebugCopyLocation = new KeyMapping("key.debug.copyLocation", InputConstants.Type.KEYSYM, 67, KeyMapping.Category.DEBUG);
    public final KeyMapping keyDebugDumpVersion = new KeyMapping("key.debug.dumpVersion", InputConstants.Type.KEYSYM, 86, KeyMapping.Category.DEBUG);

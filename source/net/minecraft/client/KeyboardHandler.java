@@ -24,6 +24,7 @@ import net.minecraft.client.gui.screens.debug.GameModeSwitcherScreen;
 import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.module.ModuleManager;
 import net.minecraft.client.input.PreeditEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.fog.FogRenderer;
@@ -550,6 +551,7 @@ public class KeyboardHandler {
                   } else {
                      KeyMapping.set(key, true);
                      KeyMapping.click(key);
+                     ModuleManager.getInstance().onKeyPress(event.key());
                   }
                } else if (key == options.keyDebugModifier.key) {
                   options.keyDebugModifier.setDown(!didDebugAction);
