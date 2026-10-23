@@ -79,6 +79,7 @@ import net.minecraft.util.profiling.jfr.JvmProfiler;
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.TickRateManager;
+import net.minecraft.world.entity.ai.SharedFields;
 import net.minecraft.world.attribute.AmbientParticle;
 import net.minecraft.world.attribute.EnvironmentAttributeSystem;
 import net.minecraft.world.attribute.EnvironmentAttributes;
@@ -638,8 +639,20 @@ public class ClientLevel extends Level implements BlockAndTintGetter, CacheSlot.
          this.addParticle(new BlockParticleOption(ParticleTypes.BLOCK_MARKER, state), x + 0.5, y + 0.5, z + 0.5, 0.0, 0.0, 0.0);
       }
 
-      if (ambientAttempts > 0 && !state.isCollisionShapeFullBlock(this, pos)) {
+      // Lithium optimization: Early out if random chance exceeds maximum biome particle chance
+      // to avoid expensive collision shape checks for particles that won't spawn
+      float maximumParticleChance = Float.intBitsToFloat(SharedFields.MAXIMUM_BIOME_PARTICLE_CHANCE.get());
+      boolean isFullBlock = this.random.nextFloat() > maximumParticleChance || state.isCollisionShapeFullBlock(this, pos);
+
+      if (ambientAttempts > 0 && !isFullBlock) {
          for (AmbientParticle particle : this.environmentAttributes().getValue(EnvironmentAttributes.AMBIENT_PARTICLES, pos)) {
+            // Lithium optimization: Track maximum particle chance for future early-outs
+            float particleProbability = particle.probability();
+            int currentMax = SharedFields.MAXIMUM_BIOME_PARTICLE_CHANCE.get();
+            while (particleProbability > Float.intBitsToFloat(currentMax)) {
+               currentMax = SharedFields.MAXIMUM_BIOME_PARTICLE_CHANCE.compareAndExchange(currentMax, Float.floatToIntBits(particleProbability));
+            }
+
             for (int attempt = 0; attempt < ambientAttempts; attempt++) {
                if (particle.canSpawn(this.random)) {
                   this.addParticle(

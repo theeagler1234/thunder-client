@@ -78,6 +78,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffectUtil;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.Brain;
+import net.minecraft.world.entity.ai.SharedFields;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeMap;
@@ -292,7 +293,8 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
       this.reapplyPosition();
       this.setYRot(this.random.nextFloat() * (float) (Math.PI * 2));
       this.yHeadRot = this.getYRot();
-      this.brain = this.makeBrain(Brain.Packed.EMPTY);
+      // Lithium optimization: Avoid creating Brain on client side
+      this.brain = level.isClientSide() ? SharedFields.getDummyBrain() : this.makeBrain(Brain.Packed.EMPTY);
    }
 
    @Override
@@ -310,6 +312,10 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
    }
 
    protected Brain<? extends LivingEntity> makeBrain(final Brain.Packed packedBrain) {
+      // Lithium optimization: Return dummy brain on client side to avoid unnecessary brain creation
+      if (this.level().isClientSide()) {
+         return SharedFields.getDummyBrain();
+      }
       return new Brain<>();
    }
 
@@ -829,7 +835,12 @@ public abstract class LivingEntity extends Entity implements Attackable, Waypoin
             this.setPosToBed(sleepingPos);
          }
       }, this::clearSleepingPos);
-      input.<Brain.Packed>read("Brain", Brain.Packed.CODEC).ifPresent(packedBrain -> this.brain = this.makeBrain(packedBrain));
+      input.<Brain.Packed>read("Brain", Brain.Packed.CODEC).ifPresent(packedBrain -> {
+         // Lithium optimization: Only restore brain on server side
+         if (!this.level().isClientSide()) {
+            this.brain = this.makeBrain(packedBrain);
+         }
+      });
       this.lastHurtByPlayer = EntityReference.read(input, "last_hurt_by_player");
       this.lastHurtByPlayerMemoryTime = input.getIntOr("last_hurt_by_player_memory_time", 0);
       this.lastHurtByMob = EntityReference.read(input, "last_hurt_by_mob");

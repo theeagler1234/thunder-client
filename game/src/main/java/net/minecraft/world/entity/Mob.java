@@ -43,6 +43,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.ai.SharedFields;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -284,7 +285,8 @@ public abstract class Mob extends LivingEntity implements Targeting, EquipmentUs
       super.baseTick();
       ProfilerFiller profiler = Profiler.get();
       profiler.push("mobBaseTick");
-      if (this.isAlive() && this.random.nextInt(1000) < this.ambientSoundTime++) {
+      // Lithium optimization: Skip ambient sound processing on client side (except Breeze which plays client-side sounds)
+      if (this.isAlive() && (!this.level().isClientSide() || this instanceof net.minecraft.world.entity.monster.breeze.Breeze) && this.random.nextInt(1000) < this.ambientSoundTime++) {
          this.resetAmbientSoundTime();
          this.playAmbientSound();
       }

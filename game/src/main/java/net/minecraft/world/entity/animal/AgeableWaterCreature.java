@@ -50,7 +50,10 @@ public abstract class AgeableWaterCreature extends AgeableMob {
    public void baseTick() {
       int airSupply = this.getAirSupply();
       super.baseTick();
-      this.handleAirSupply(airSupply);
+      // Lithium optimization: Skip air supply handling on client side
+      if (!this.level().isClientSide()) {
+         this.handleAirSupply(airSupply);
+      }
    }
 
    @Override
