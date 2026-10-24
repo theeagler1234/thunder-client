@@ -1,0 +1,33 @@
+name: Build Thunder Client
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25-ea'
+          distribution: 'temurin'
+
+      - name: Build offline HTML client
+        run: chmod +x gradlew && ./gradlew buildOfflineClient
+
+      - name: Upload built HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: eaglercraft-client
+          path: build/**/*.html
