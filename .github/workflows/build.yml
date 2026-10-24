@@ -11,21 +11,27 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Java 25
+      - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
-          java-version: '25'
-          distribution: 'oracle'
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        run: npm install
 
       - name: Override Gradle wrapper version
         run: |
           sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.8-bin.zip|' gradle/wrapper/gradle-wrapper.properties
 
-      - name: Build offline HTML client
-        run: chmod +x gradlew && ./gradlew buildOfflineClient
+      - name: Build JS client only
+        run: node build-offline-html.js --target=js --fast
 
       - name: Upload built HTML
         uses: actions/upload-artifact@v4
         with:
-          name: eaglercraft-client
-          path: build/**/*.html
