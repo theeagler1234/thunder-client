@@ -8,29 +8,35 @@ const os = require("os");
 const path = require("path");
 const { readStandaloneClasspaths } = require("./standalone-classpaths");
 const { withVerifiedCache, withOperationLock, toolchainInputs, environmentIdentity, cacheMode } = require("./standalone-link-cache");
+const { planLinkMemory, explainLinkFailure, describe: describeMemoryPlan } = require("./memory-plan");
 
 const repo = path.resolve(__dirname, "..");
 const diagnostic = process.env.EAGLER_SERVER_DIAGNOSTIC === "1";
-const SERVER_LINK_HEAP_MIN_MIB = 8192;
+// 8192 MiB is the lowest heap the original project tested. Lower values are accepted
+// for explicit overrides (and chosen automatically down to 6656 MiB) on machines
+// with little RAM; memory-plan.js explains the trade-off and warns.
+const SERVER_LINK_HEAP_MIN_MIB = 4096;
 const SERVER_LINK_HEAP_MAX_MIB = 12544;
 const SERVER_LINK_HEAP_DEFAULT_MIB = 12544;
 // Keep this literal as the source-current prepare-client anchor. Isolated
 // workspaces rewrite it to their conservative 11264 MiB default; an explicit
 // EAGLER_SERVER_LINK_HEAP_MIB override still wins in either checkout.
 const SERVER_LINK_HEAP_DEFAULT_ARG = "-Xmx12544m";
-const rawServerLinkHeapMiB = process.env.EAGLER_SERVER_LINK_HEAP_MIB
-  ?? String(SERVER_LINK_HEAP_DEFAULT_MIB);
-if (!/^\d+$/.test(rawServerLinkHeapMiB)) {
-  console.error(`EAGLER_SERVER_LINK_HEAP_MIB must be an integer between ${SERVER_LINK_HEAP_MIN_MIB} and ${SERVER_LINK_HEAP_MAX_MIB}`);
+// Sized from the memory that is actually free (see memory-plan.js). Machines with
+// plenty of RAM get SERVER_LINK_HEAP_DEFAULT_MIB; EAGLER_SERVER_LINK_HEAP_MIB sets
+// it explicitly. The heap does not change the linked output.
+const memoryPlan = planLinkMemory("server", {
+  defaultHeapMiB: SERVER_LINK_HEAP_DEFAULT_MIB,
+  minHeapMiB: SERVER_LINK_HEAP_MIN_MIB,
+  maxHeapMiB: SERVER_LINK_HEAP_MAX_MIB,
+});
+if (memoryPlan.error) {
+  console.error(memoryPlan.error);
   process.exit(2);
 }
-const serverLinkHeapMiB = Number(rawServerLinkHeapMiB);
-if (!Number.isSafeInteger(serverLinkHeapMiB)
-    || serverLinkHeapMiB < SERVER_LINK_HEAP_MIN_MIB
-    || serverLinkHeapMiB > SERVER_LINK_HEAP_MAX_MIB) {
-  console.error(`EAGLER_SERVER_LINK_HEAP_MIB must be an integer between ${SERVER_LINK_HEAP_MIN_MIB} and ${SERVER_LINK_HEAP_MAX_MIB}`);
-  process.exit(2);
-}
+const serverLinkHeapMiB = memoryPlan.heapMiB;
+console.log(`[standalone-server-link] memory plan: ${describeMemoryPlan(memoryPlan)}`);
+for (const warning of memoryPlan.warnings) console.warn(`[standalone-server-link] warning: ${warning}`);
 const serverLinkHeapArg = serverLinkHeapMiB === SERVER_LINK_HEAP_DEFAULT_MIB
   ? SERVER_LINK_HEAP_DEFAULT_ARG : `-Xmx${serverLinkHeapMiB}m`;
 cacheMode(); // Bypass applies to both slice preparation and the precise link.
@@ -60,18 +66,20 @@ function findGradleModuleJar(group, module, version, fileName) {
 }
 
 function run(command, args, options = {}) {
+  const { onFailure, ...spawnOptions } = options;
   console.log(`[standalone-server-link] ${command} ${args.join(" ")}`);
   const result = childProcess.spawnSync(command, args, {
     cwd: repo,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
-    ...options,
+    ...spawnOptions,
   });
-  if (options.stdio !== "inherit") {
+  if (spawnOptions.stdio !== "inherit") {
     process.stdout.write(result.stdout || "");
     process.stderr.write(result.stderr || "");
   }
   if (result.status !== 0) {
+    if (onFailure) onFailure(result.status);
     process.exit(result.status == null ? 1 : result.status);
   }
   return result.stdout || "";
@@ -169,7 +177,10 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
     inputs: () => {
       const runtime = toolchainInputs([process.execPath, "java", "javac"]);
       return {
-        metadata: { operation: "precise-link", diagnostic, optimization: "ADVANCED", serverLinkHeapMiB,
+        // The heap size is deliberately not part of the key: it never changes the
+        // linked output, and keeping it out lets a retry with a different heap
+        // reuse the links that already finished.
+        metadata: { operation: "precise-link", diagnostic, optimization: "ADVANCED",
           mainClass: "net.lax1dude.eaglercraft.v1_8.internal.wasm_gc_teavm_server.ServerMainClass",
           obfuscated: !diagnostic, outputDirectory, classpathFile, linkerClasses, cwd: repo,
           toolCommands: runtime.resolvedCommands, environment: environmentIdentity() },
@@ -194,7 +205,7 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
       fs.mkdirSync(outputDirectory, { recursive: true });
       run(process.execPath, [
         path.join(repo, "wasm-toolchain", "run-memory-capped.js"),
-        "--limit-mib", "13312",
+        "--limit-mib", String(memoryPlan.capMiB),
         "--log-file", linkLog,
         "java",
           // JDK 25 compact headers materially shrink TeaVM's millions of dependency
@@ -208,6 +219,12 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
           // process-tree cap; EAGLER_SERVER_LINK_HEAP_MIB is an explicit bounded
           // override for constrained hosts.
           serverLinkHeapArg,
+          // Only below the originally tested 8192 MiB: cap the young generation so the
+          // old generation, which holds the dependency graph, keeps its capacity.
+          ...(memoryPlan.youngMiB ? [`-Xmn${memoryPlan.youngMiB}m`] : []),
+          // An out-of-memory link cannot recover. Exit at once rather than crawl
+          // through GC-overhead failures for minutes.
+          "-XX:+ExitOnOutOfMemoryError",
           "-Xss2m",
           "-XX:MaxMetaspaceSize=256m",
           // Dependency analysis is single-threaded, but the first capped run spent
@@ -215,7 +232,7 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
           // to four helpers: emitted Wasm semantics are unchanged, while collection
           // no longer serializes a 12 GiB exact dependency graph on one core.
           "-XX:+UseParallelGC",
-          "-XX:ParallelGCThreads=4",
+          `-XX:ParallelGCThreads=${memoryPlan.gcThreads}`,
         "-cp", [linkerClasses, ...toolClasspath].join(path.delimiter),
         "StandaloneTeaVMLinker",
         classpathFile,
@@ -224,7 +241,12 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
         "server-worker.wasm",
         "ADVANCED",
         diagnostic ? "false" : "true",
-      ], { stdio: "inherit" });
+      ], {
+        stdio: "inherit",
+        onFailure: status => explainLinkFailure({
+          plan: memoryPlan, status, logFile: linkLog, label: "standalone-server-link",
+        }),
+      });
     },
   });
   const hash = crypto.createHash("sha256").update(fs.readFileSync(artifact)).digest("hex");

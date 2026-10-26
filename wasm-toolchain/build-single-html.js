@@ -10,6 +10,7 @@ const {
   persistVerifiedBrotli,
   readVerifiedBrotli
 } = require("./content-verified-brotli.js");
+const { planBuildCap, planPackaging, gradleJvmArgs } = require("./memory-plan.js");
 
 const repo = path.resolve(__dirname, "..");
 const webDir = path.join(repo, "target_teavm_wasm_gc", "build", "web");
@@ -31,7 +32,9 @@ const fastPackage = args.has("--fast-package");
 const withoutMusic = !args.has("--with-music");
 const withMusic = !withoutMusic;
 const MAX_BUILD_LIMIT_MIB = 13 * 1024;
-const buildLimitMiB = Number(process.env.EAGLER_BUILD_CAP_MIB || MAX_BUILD_LIMIT_MIB);
+// Without an explicit EAGLER_BUILD_CAP_MIB the cap follows the memory plan: the
+// original 13 GiB on machines with plenty of RAM, lower on smaller ones.
+const buildLimitMiB = Number(process.env.EAGLER_BUILD_CAP_MIB || planBuildCap());
 const WASM_GC_RUNTIME_SHA256 = "1e80092312d7bfe6efa74f8bb372d5521bc0549dcfbf384f25a145261a80d124";
 const WASM_GC_RUNTIME_BYTES = 13984;
 
@@ -168,7 +171,7 @@ function prepareBaseAssets() {
     "--no-daemon",
     "--max-workers=1",
     "-Dorg.gradle.parallel=false",
-    "-Dorg.gradle.jvmargs=-Xmx4096m -Xss4m -XX:MaxMetaspaceSize=768m -XX:+UseG1GC"
+    `-Dorg.gradle.jvmargs=${gradleJvmArgs()}`
   ]);
   const packed = path.join(repo, "target_lwjgl_desktop", "build", "epk", "assets.epk");
   const hosted = path.join(repo, "target_teavm", "build", "web", "assets.epk");
@@ -295,11 +298,17 @@ if (!skipBuild) {
   run("bash", ["wasm-toolchain/deploy_wasm_web.sh"], {
     EAGLER_USE_DEDICATED_SERVER_WASM: "1"
   });
-  run("bash", ["wasm-toolchain/precompress-web.sh"], fastPackage ? {
-    EAGLER_BROTLI_QUALITY: "4",
-    EAGLER_SKIP_GZIP: "1",
-    EAGLER_REUSE_HIGHER_BROTLI_QUALITY: "1"
-  } : {});
+  // On machines with little free memory compress one file at a time; this costs
+  // minutes, not gigabytes. An explicit EAGLER_COMPRESS_JOBS always wins.
+  const { compressJobs } = planPackaging();
+  run("bash", ["wasm-toolchain/precompress-web.sh"], {
+    ...(fastPackage ? {
+      EAGLER_BROTLI_QUALITY: "4",
+      EAGLER_SKIP_GZIP: "1",
+      EAGLER_REUSE_HIGHER_BROTLI_QUALITY: "1"
+    } : {}),
+    ...(compressJobs ? { EAGLER_COMPRESS_JOBS: String(compressJobs) } : {})
+  });
 }
 
 const diagnosticMarker = path.join(webDir, "DIAGNOSTIC_BUILD_DO_NOT_DEPLOY");

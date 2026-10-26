@@ -15,6 +15,7 @@ const path = require("path");
 const { readStandaloneClasspaths } = require("./standalone-classpaths");
 const { substituteGameJarWithOverlay } = require("./field-overlay-link");
 const { withVerifiedCache, withOperationLock, toolchainInputs, environmentIdentity, cacheMode } = require("./standalone-link-cache");
+const { planLinkMemory, explainLinkFailure, describe: describeMemoryPlan } = require("./memory-plan");
 
 const repo = path.resolve(__dirname, "..");
 const generated = path.join(repo, "wasm-toolchain", "generated");
@@ -27,7 +28,6 @@ const argv = process.argv.slice(2);
 const targetName = argv[0];
 const diagnostic = argv.includes("--diagnostic");
 const fastAnalysis = argv.includes("--fast-analysis");
-const linkerHeapMiB = Number.parseInt(process.env.EAGLER_LINK_HEAP_MIB || "12288", 10);
 cacheMode(); // Reject malformed cache policy before starting Gradle.
 let fieldOverlayJar = null;
 for (let index = 1; index < argv.length; index++) {
@@ -62,10 +62,17 @@ if (fastAnalysis && diagnostic) {
   console.error("--fast-analysis cannot be combined with --diagnostic");
   process.exit(2);
 }
-if (!Number.isFinite(linkerHeapMiB) || linkerHeapMiB < 8192 || linkerHeapMiB > 12544) {
-  console.error("EAGLER_LINK_HEAP_MIB must be between 8192 and 12544");
+// The heap is sized from the memory that is actually free (see memory-plan.js).
+// Machines with plenty of RAM get the original 12288 MiB; EAGLER_LINK_HEAP_MIB
+// still sets it explicitly. The heap does not change the linked output.
+const memoryPlan = planLinkMemory(targetName);
+if (memoryPlan.error) {
+  console.error(memoryPlan.error);
   process.exit(2);
 }
+const linkerHeapMiB = memoryPlan.heapMiB;
+console.log(`[standalone-${targetName}-link] memory plan: ${describeMemoryPlan(memoryPlan)}`);
+for (const warning of memoryPlan.warnings) console.warn(`[standalone-${targetName}-link] warning: ${warning}`);
 
 const target = targetName === "client" ? {
   project: "target_teavm_wasm_gc",
@@ -89,18 +96,22 @@ const installedDirectory = path.join(repo, target.project, "build", "generated",
 const linkLog = path.join(generated, `${targetName}-${analysisMode}-link.log`);
 
 function run(command, args, options = {}) {
+  const { onFailure, ...spawnOptions } = options;
   console.log(`[standalone-${targetName}-link] ${command} ${args.join(" ")}`);
   const result = childProcess.spawnSync(command, args, {
     cwd: repo,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
-    ...options,
+    ...spawnOptions,
   });
-  if (options.stdio !== "inherit") {
+  if (spawnOptions.stdio !== "inherit") {
     process.stdout.write(result.stdout || "");
     process.stderr.write(result.stderr || "");
   }
-  if (result.status !== 0) process.exit(result.status == null ? 1 : result.status);
+  if (result.status !== 0) {
+    if (onFailure) onFailure(result.status);
+    process.exit(result.status == null ? 1 : result.status);
+  }
   return result.stdout || "";
 }
 
@@ -196,7 +207,10 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
         metadata: { operation: fastAnalysis ? "fast-analysis-link" : "precise-link", targetName, target, diagnostic,
           dependencyAnalysis: analysisMode, fastDependencyAnalysis: fastAnalysis,
           requestedOptimization: "FULL", effectiveOptimization, strict: true,
-          linkerHeapMiB, outputDirectory, classpathFile, linkerClasses, cwd: repo,
+          // The heap size is deliberately not part of the key: it never changes the
+          // linked output, and keeping it out lets a retry with a different heap
+          // reuse the links that already finished.
+          outputDirectory, classpathFile, linkerClasses, cwd: repo,
           toolCommands: runtime.resolvedCommands, environment: environmentIdentity() },
         groups: { toolClasspath, programClasspath, runtime: runtime.files,
           source: [__filename, classpathFile, path.join(__dirname, "field-overlay-link.js"), path.join(__dirname, "standalone-link-cache.js"),
@@ -219,12 +233,18 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
       fs.mkdirSync(outputDirectory, { recursive: true });
       run(process.execPath, [
         path.join(repo, "wasm-toolchain", "run-memory-capped.js"),
-        "--limit-mib", "13312",
+        "--limit-mib", String(memoryPlan.capMiB),
         "--log-file", linkLog,
         "java",
           "-XX:+UnlockExperimentalVMOptions",
           "-XX:+UseCompactObjectHeaders",
           `-Xmx${linkerHeapMiB}m`,
+          // Only below the originally tested 8192 MiB: cap the young generation so the
+          // old generation, which holds the dependency graph, keeps its capacity.
+          ...(memoryPlan.youngMiB ? [`-Xmn${memoryPlan.youngMiB}m`] : []),
+          // An out-of-memory link cannot recover. Exit at once rather than crawl
+          // through GC-overhead failures for minutes.
+          "-XX:+ExitOnOutOfMemoryError",
           // The mesh target's generated registry initializer is deeply nested. TeaVM's
           // WasmGC init-function splitter walks that tree recursively, so give that
           // linker thread enough stack without changing the linked program or its
@@ -232,7 +252,7 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
           targetName === "mesh" ? "-Xss32m" : "-Xss2m",
           "-XX:MaxMetaspaceSize=256m",
           "-XX:+UseParallelGC",
-          "-XX:ParallelGCThreads=4",
+          `-XX:ParallelGCThreads=${memoryPlan.gcThreads}`,
         "-cp", [linkerClasses, ...toolClasspath].join(path.delimiter),
         "StandaloneTeaVMLinker",
         classpathFile,
@@ -242,7 +262,12 @@ withOperationLock(path.join(generated, "standalone-link-cache"), cacheOwner => {
         "FULL",
         String(target.obfuscated),
         ...(fastAnalysis ? ["true"] : []),
-      ], { stdio: "inherit" });
+      ], {
+        stdio: "inherit",
+        onFailure: status => explainLinkFailure({
+          plan: memoryPlan, status, logFile: linkLog, label: `standalone-${targetName}-link`,
+        }),
+      });
     },
   });
   const hash = crypto.createHash("sha256").update(fs.readFileSync(artifact)).digest("hex");
